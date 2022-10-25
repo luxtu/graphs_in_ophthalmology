@@ -5,6 +5,12 @@ from tqdm import tqdm
 
 
 def createGraph(nodesFile, edgesFile):
+    """ Creates an networkX undirected multigraph from provided csv files.
+    :nodesFile: A csv file containing information about the nodes
+    :edgesFile: A csv file containing information about the edges
+
+    :return G: A networkX multigraph object
+    """
     nodes = pd.read_csv(nodesFile, sep = ";", index_col= "id")
     edges = pd.read_csv(edgesFile, sep = ";", index_col= "id")
     # create undirected graph 
@@ -21,7 +27,13 @@ def createGraph(nodesFile, edgesFile):
     return G
 
 
+
 def convertToEinfach(G_multi):
+    """ Creates an networkX simple graph from a networkX multigraph. Also removes all isolated nodes and self loops
+    :G_multi: A networkX graph object 
+
+    :return G: A simple networkX graph without selfloops, parallel edges and isolated nodes.
+    """
     G_einfach = nx.Graph(G_multi)
     G_einfach.remove_edges_from(list(nx.selfloop_edges(G_einfach)))
     G_einfach.remove_nodes_from(list(nx.isolates(G_einfach)))
@@ -29,8 +41,12 @@ def convertToEinfach(G_multi):
     return G_einfach
     
 
-#trying to find features that are beneficial for the classification accuracy
+
 def enrichNodeAttributes(G):
+    """ Enriches the x. attribute of the nodes of a networkX graph with features extracted from the incident edges.
+    :G: A networkX graph object 
+    
+    """
     feature_dict = {}
     for node in G.nodes:
         nodes_edges = G.edges(node)
@@ -62,6 +78,10 @@ def enrichNodeAttributes(G):
 
 
 def graphSummary(G):
+    """ A method that prints out a quick summary of the characteristics of a networkX graph.
+    :G: A networkX graph object 
+
+    """
     nodeNum = G.order()
     edgeNum = G.size()
     con_comp = nx.algorithms.components.number_connected_components(G)
