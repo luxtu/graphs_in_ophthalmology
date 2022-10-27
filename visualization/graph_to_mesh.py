@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 import trimesh
-from vedo import mesh, io
 from scipy import sparse
 import multiprocessing
 from tqdm import tqdm
+from scipy.spatial import KDTree
 
 
 
@@ -232,9 +232,32 @@ def createMesh(nodes, edges):
 
 
     
+def network_sparse_distance_matrix(nodes_1, nodes_2, th = 0.015):
+
+    points_1 = np.array(nodes_1[["pos_x","pos_y","pos_z"]])
+    points_2 = np.array(nodes_2[["pos_x","pos_y","pos_z"]])
+
+    kd_1 = KDTree(points_1)
+    kd_2 = KDTree(points_2)
+
+    dist_mat_sparse = kd_1.sparse_distance_matrix(kd_2, th)
+    dist_mat = dist_mat_sparse.toarray()
+
+    return dist_mat_sparse
 
 
+def connection_edges(nodes_1, nodes_2, th = 0.015):
 
+    dist_mat_sparse = network_sparse_distance_matrix(nodes_1, nodes_2, th = th)
+    indices = dist_mat_sparse.keys()
+
+    df = pd.DataFrame(data = list(indices))
+
+    df.columns = ["node1id", "node2id"]
+    new_edges = pd.merge(pd.merge(nodes_1, df, left_on='id', right_on='node1id'),nodes_2, left_on = "node2id", right_on = "id")
+    new_edges = new_edges.drop(columns = ['degree_x', 'isAtSampleBorder_x', 'degree_y', 'isAtSampleBorder_y'])
+
+    return new_edges
 
 
 

@@ -2,44 +2,61 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from scipy.spatial import KDTree
 
 
-def createGraph(nodesFile, edgesFile):
+def createGraph(nodesFile, edgesFile, index_addon = None):
     """ Creates an networkX undirected multigraph from provided csv files.
     :nodesFile: A csv file containing information about the nodes
     :edgesFile: A csv file containing information about the edges
+    :id: an identifier to avoid ambiguous combinations of graphs
 
     :return G: A networkX multigraph object
     """
-    nodes = pd.read_csv(nodesFile, sep = ";", index_col= "id")
-    edges = pd.read_csv(edgesFile, sep = ";", index_col= "id")
+    if type(nodesFile) ==str and type(nodesFile) ==str :
+        nodes = pd.read_csv(nodesFile, sep = ";", index_col= "id")
+        edges = pd.read_csv(edgesFile, sep = ";", index_col= "id")
+    else:
+        nodes = nodesFile
+        edges = edgesFile
     # create undirected graph 
     G = nx.MultiGraph()
 
-    # add the vertices
-    for idxN, node in nodes.iterrows():
-        G.add_node(idxN, x = (), pos = (float(node["pos_x"]),float(node["pos_y"]), float(node["pos_z"])))
 
-    # add the edges
-    for idxE, edge in edges.iterrows():
-        G.add_edge(edge["node1id"], edge["node2id"], x = (edge["distance"], edge["length"], edge["minRadiusAvg"], edge["curveness"], edge["avgRadiusStd"], edge["num_voxels"]))
+    if index_addon is not None:
+        for idxN, node in nodes.iterrows():
+            G.add_node(str(int(idxN)) + index_addon, x = (), pos = (float(node["pos_x"]),float(node["pos_y"]), float(node["pos_z"])))
+
+        # add the edges
+        for idxE, edge in edges.iterrows():
+            G.add_edge(str(int(edge["node1id"]))  + index_addon , str(int(edge["node2id"])) + index_addon, x = (edge["distance"], edge["length"], edge["minRadiusAvg"], edge["curveness"], edge["avgRadiusStd"], edge["num_voxels"]))
+
+    else:
+        for idxN, node in nodes.iterrows():
+            G.add_node(idxN, x = (), pos = (float(node["pos_x"]),float(node["pos_y"]), float(node["pos_z"])))
+
+        # add the edges
+        for idxE, edge in edges.iterrows():
+            G.add_edge(edge["node1id"],edge["node2id"], x = (edge["distance"], edge["length"], edge["minRadiusAvg"], edge["curveness"], edge["avgRadiusStd"], edge["num_voxels"]))
 
     return G
 
 
 
-def convertToEinfach(G_multi):
+def convertToEinfach(G_multi, self_loops = False, isolates = False):
     """ Creates an networkX simple graph from a networkX multigraph. Also removes all isolated nodes and self loops
     :G_multi: A networkX graph object 
 
     :return G: A simple networkX graph without selfloops, parallel edges and isolated nodes.
     """
     G_einfach = nx.Graph(G_multi)
-    G_einfach.remove_edges_from(list(nx.selfloop_edges(G_einfach)))
-    G_einfach.remove_nodes_from(list(nx.isolates(G_einfach)))
+    if not self_loops:
+        G_einfach.remove_edges_from(list(nx.selfloop_edges(G_einfach)))
+    if not isolates:
+        G_einfach.remove_nodes_from(list(nx.isolates(G_einfach)))
 
     return G_einfach
-    
+
 
 
 def enrichNodeAttributes(G):
@@ -98,3 +115,111 @@ def graphSummary(G):
     print("Average Node Degree: " + str(avg_deg_multi))    
     print("***************")
     return
+
+
+
+def network_sparse_distance_matrix(nodes_1, nodes_2, th):
+
+    points_1 = np.array(nodes_1[["pos_x","pos_y","pos_z"]])
+    points_2 = np.array(nodes_2[["pos_x","pos_y","pos_z"]])
+
+    kd_1 = KDTree(points_1)
+    kd_2 = KDTree(points_2)
+
+    dist_mat_sparse = kd_1.sparse_distance_matrix(kd_2, th)
+
+    return dist_mat_sparse
+
+
+
+def connection_edges(nodes_1, nodes_2, th):
+
+    dist_mat_sparse = network_sparse_distance_matrix(nodes_1, nodes_2, th = th)
+    indices = dist_mat_sparse.keys()
+
+    df = pd.DataFrame(data = list(indices))
+
+    df.columns = ["node1id", "node2id"]
+    new_edges = pd.merge(pd.merge(nodes_1, df, left_on='id', right_on='node1id'),nodes_2, left_on = "node2id", right_on = "id")
+    new_edges = new_edges.drop(columns = ['degree_x', 'isAtSampleBorder_x', 'degree_y', 'isAtSampleBorder_y'])
+
+    return new_edges
+
+
+
+
+
+def contractEdges(rel_edges, G):
+    node_transfer = {}
+    pbar = tqdm(total=rel_edges.shape[0])
+    for idxR, edge in rel_edges.iterrows():
+        pbar.update(1)
+        try:
+            G = nx.contracted_nodes(G, edge["node1id"], edge["node2id"])
+
+            #node = G.nodes[edge["node1id"]]
+            #posA = np.array(node["pos"])
+            #posB = np.array(node["contraction"][edge["node2id"]]["pos"])
+            #node["pos"] = tuple((posA+posB)/2)
+            #del node["contraction"]
+
+            node_transfer[edge["node2id"]] = edge["node1id"]
+        except KeyError:
+            G = nx.contracted_nodes(G, edge["node1id"], node_transfer[edge["node2id"]])
+
+            #node = G.nodes[edge["node1id"]]
+            #posA = np.array(node["pos"])
+            #posB = np.array(node["contraction"][node_transfer[edge["node2id"]]]["pos"])
+            #node["pos"] = tuple((posA+posB)/2)
+            #del node["contraction"]
+
+            node_transfer[edge["node2id"]] = edge["node1id"]
+    pbar.close()
+
+    # give the connecting edges a new name
+    merge_nodes = set(node_transfer.values())
+    merge_node_names = np.arange(0, len(merge_nodes))
+    merge_node_names = [str(elem)+ "c" for elem in merge_node_names]
+    merge_node_dict = dict(zip(merge_nodes, merge_node_names))
+    G = nx.relabel_nodes(G, merge_node_dict)
+
+
+    transfer_dict = {k:set() for k in merge_node_names}
+    for k,v in node_transfer.items():
+        try:
+            key =  merge_node_dict[k]
+        except KeyError:
+            key = merge_node_dict[node_transfer[k]]
+        transfer_dict[key].add(k)
+        transfer_dict[key].add(v)
+
+    return G, transfer_dict
+
+
+
+def contractedCombinedGraph(G1, G2, nodes1csv, nodes2csv, th = 0.01):
+    # creating a new graph by combining the two networks
+    G_whole = nx.compose(G1, G2)
+    print("Before Contraction")
+    graphSummary(G_whole)
+
+    # loading edge informations
+    nodes1_df = pd.read_csv(nodes1csv, sep = ";", index_col= "id")
+    nodes2_df = pd.read_csv(nodes2csv, sep = ";", index_col= "id")
+
+    # creating a df for the connecting edges
+    con_edges = connection_edges(nodes1_df, nodes2_df, th)
+    rel_edges = con_edges[["node1id", "node2id"]]
+
+    # make the names unique for each network type
+    rel_edges['node1id'] = rel_edges['node1id'].apply(lambda x: str(x) + "n")
+    rel_edges['node2id'] = rel_edges['node2id'].apply(lambda x: str(x) + "l") 
+
+    # contract the connecting edges in the new graph
+    G_whole, transfer_dict = contractEdges(rel_edges, G_whole)
+
+
+    print("After Contraction")
+    graphSummary(G_whole)
+
+    return G_whole, transfer_dict
