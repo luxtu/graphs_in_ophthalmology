@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from scipy.spatial import KDTree
+from scipy.sparse import csr_matrix
+from scipy.sparse import dok_array
 
 
 def createGraph(nodesFile, edgesFile, index_addon = None):
@@ -88,7 +90,7 @@ def enrichNodeAttributes(G):
             tot_dis += G.get_edge_data(*sedge)["x"][0]
             avg_dis.append(G.get_edge_data(*sedge)["x"][0])
 
-        feature_dict[node] = (float(tot_vol), float(tot_len), float(np.mean(avg_vol_l)), float(np.mean(avg_len_l)), float(np.mean(curveness)), float(np.mean(avg_rad_sd)), float(tot_voxel), float(tot_dis), float(np.mean(avg_dis)))
+        feature_dict[node] = (float(tot_vol), float(tot_len), float(np.mean(avg_vol_l)), float(np.mean(avg_len_l)), float(np.mean(curveness)), float(np.mean(avg_rad_sd)), float(tot_voxel), float(tot_dis), float(np.mean(avg_dis)), float(np.std(avg_vol_l)), float(np.std(avg_len_l)), float(np.std(curveness)), float(np.std(avg_rad_sd)),float(np.std(avg_dis)))
     nx.set_node_attributes(G, feature_dict,'x')
     #['node1id', 'node2id', 'length', 'distance', 'curveness', 'volume', 'avgCrossSection', 'minRadiusAvg', 'minRadiusStd', 'avgRadiusAvg',
     #   'avgRadiusStd', 'maxRadiusAvg', 'maxRadiusStd', 'roundnessAvg','roundnessStd', 'node1_degree', 'node2_degree', 'num_voxels', 'hasNodeAtSampleBorder']
@@ -116,6 +118,66 @@ def graphSummary(G):
     print("***************")
     return
 
+
+def scalePosition(df, scaleVector):
+    df["pos_x"] = df["pos_x"]*scaleVector[0]
+    df["pos_y"] = df["pos_y"]*scaleVector[1]
+    df["pos_z"] = df["pos_z"]*scaleVector[2]
+
+    return df
+
+
+def connected_components_dict(labels):
+    con_comp = {}
+    for i in range(len(labels)):
+        try:
+            con_comp[labels[i]].add(i)
+        except KeyError:
+            con_comp[labels[i]] = {i}
+
+    return con_comp
+
+
+
+def relevant_connected_components(con_comp, node1_size, labels, rel_th = 1):
+    rel_comp = {}
+    for k, v in con_comp.items():
+        if len(v)>rel_th:
+            resList = []
+            for val in v:
+                if val >=node1_size:
+                    resList.append(str(val- node1_size) + labels[1])
+                else:
+                    resList.append(str(val) + labels[0])
+            rel_comp[str(k) +"c"] = resList
+    return rel_comp
+
+
+
+
+def relable_edges_nodes(edges, nodes, index_addon):
+    idx = list(nodes.index)
+    idx_new = [str(elem) + index_addon for elem in idx]
+    nodes.index = idx_new
+
+    edges['node1id'] = edges['node1id'].apply(lambda x: str(x) + index_addon)
+    edges['node2id'] = edges['node2id'].apply(lambda x: str(x) + index_addon) 
+
+    return edges, nodes
+
+
+def distance_based_adjacency(nodes_1, nodes_2, th):
+
+    dist_mat_sparse = network_sparse_distance_matrix(nodes_1, nodes_2, th)
+    adjM = dok_array((nodes_1.shape[0]+ nodes_2.shape[0], nodes_1.shape[0]+ nodes_2.shape[0]), dtype=np.uint8)
+
+    for key in dist_mat_sparse.keys():
+        adjM[key[0], key[1] + nodes_1.shape[0]] = 1
+        adjM[key[1]+ nodes_1.shape[0], key[0]] = 1
+
+    adjMcsr = adjM.tocsr()
+
+    return adjMcsr
 
 
 def network_sparse_distance_matrix(nodes_1, nodes_2, th):

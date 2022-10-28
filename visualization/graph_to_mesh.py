@@ -199,7 +199,7 @@ def connectedComponentMeshMulti(args):
 
 
 def createMesh(nodes, edges):
-    """ A function that creates a trimseh object corresponding to the infromation provided in node and edge files.
+    """ A function that creates a trimesh object corresponding to the information provided in node and edge files.
     :nodes: A pandas dataframe with the node information
     :edges: A pandas dataframe with the edge information.
 
@@ -232,34 +232,109 @@ def createMesh(nodes, edges):
 
 
     
-def network_sparse_distance_matrix(nodes_1, nodes_2, th = 0.015):
 
-    points_1 = np.array(nodes_1[["pos_x","pos_y","pos_z"]])
-    points_2 = np.array(nodes_2[["pos_x","pos_y","pos_z"]])
+def createNodesNx(G, nodes):
+    """ A function that returns a list of meshes for each node in a pandas dataframe.
+    :nodes: A pandas dataframe with the node information
 
-    kd_1 = KDTree(points_1)
-    kd_2 = KDTree(points_2)
-
-    dist_mat_sparse = kd_1.sparse_distance_matrix(kd_2, th)
-    dist_mat = dist_mat_sparse.toarray()
-
-    return dist_mat_sparse
-
-
-def connection_edges(nodes_1, nodes_2, th = 0.015):
-
-    dist_mat_sparse = network_sparse_distance_matrix(nodes_1, nodes_2, th = th)
-    indices = dist_mat_sparse.keys()
-
-    df = pd.DataFrame(data = list(indices))
-
-    df.columns = ["node1id", "node2id"]
-    new_edges = pd.merge(pd.merge(nodes_1, df, left_on='id', right_on='node1id'),nodes_2, left_on = "node2id", right_on = "id")
-    new_edges = new_edges.drop(columns = ['degree_x', 'isAtSampleBorder_x', 'degree_y', 'isAtSampleBorder_y'])
-
-    return new_edges
+    :return meshList: A list of meshes for all the provided nodes.
+    """
+    meshList = []
+    node_rad = 0.005
+    
+    for node in nodes:
+        pos = G.nodes[node]["pos"]
+        mesh = trimesh.primitives.Sphere(center = pos, radius = node_rad)
+        meshList.append(mesh)
+    return meshList
 
 
+def nodeMeshesNx(G):
+
+    node_lis = np.array(list(G.nodes))
+    node_types = [elem[-1] for elem in node_lis]
+    unique_nodes = np.unique(node_types)
+
+    nodes_meshes = []
+    for label in unique_nodes:
+        mask = [elem == label for elem in node_types]
+        meshList = createNodesNx(G, node_lis[mask])
+        mesh = trimesh.util.concatenate(meshList)
+        nodes_meshes.append(mesh)
+
+    return nodes_meshes, unique_nodes
 
 
+
+def createEdgeNx(G, edge):
+
+    edge_rad = 0.0025
+
+    node1_pos = np.array(G.nodes[edge[0]]["pos"])
+    node2_pos = np.array(G.nodes[edge[1]]["pos"])
+
+    cent = (node1_pos+ node2_pos)/2
+    dir = node1_pos - node2_pos
+
+    v_hat = dir / np.linalg.norm(dir)
+    v_hat = np.array(([v_hat[0]],[v_hat[1]],[v_hat[2]])).T
+
+    rot = rotation_matrix_from_vectors((0,0,1),v_hat)
+    mat = transform_from_rot_trans(rot, cent)
+    meshE = trimesh.primitives.Cylinder(radius = edge_rad, height = np.linalg.norm(dir) , transform = mat)
+
+    return meshE
+
+
+
+def createEdgesNx(G, edges):
+
+
+    meshList = []
+    for edge in edges:
+        if edge[0]!= edge[1]:
+            mesh = createEdgeNx(G, edge)
+            meshList.append(mesh)
+    return meshList
+
+
+def edgeMeshesNx(G):
+
+    edgesList = list(G.edges)
+
+    hash_dict = {}
+    edge_dict = {}
+    for edge in edgesList:
+        key = hash(edge[0][-1]) + hash(edge[1][-1])
+        try:
+            edge_dict[key].add(edge)
+        except KeyError:
+            edge_dict[key] = set()
+            hash_dict[key] = [edge[0][-1], edge[1][-1]]
+    
+    unqiue_edges = []
+    edge_meshes = [] 
+    for k, edgeType in edge_dict.items():
+        meshList = createEdgesNx(G, edgeType)
+        mesh = trimesh.util.concatenate(meshList)
+        edge_meshes.append(mesh)
+        unqiue_edges.append(hash_dict[k])
+
+    return edge_meshes,unqiue_edges
+
+
+def createMeshNX(G, combine = False):
+    """ A function that creates a trimseh object corresponding to a provided networkX graph.
+    G: A networkX graph
+
+    """
+
+    nodeMeshes, unqiue_nodes = nodesMeshesNx(G)
+    edgeMeshes, unqiue_nodes = edgeMeshesNx(G)
+
+    if not combine:
+        return nodeMeshes, edgeMeshes
+
+    else:
+        return trimesh.util.concat(nodesMeshes+edgeMeshes)
 
