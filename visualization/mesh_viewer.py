@@ -155,12 +155,17 @@ def show3_trimeshs(trimesh1, trimesh2, trimesh3):
 
 
 
-def showList_trimesh(trimesh_lis):
-    col_sel = np.random.choice(list(hexcolors.keys()), size=len(trimesh_lis), replace=True, p=None)
+def showList_trimesh(trimesh_lis, color_list = None):
+
+    if color_list is None:
+        color_list = np.random.choice(list(hexcolors.keys()), size=len(trimesh_lis), replace=True, p=None)
+    elif len(color_list) < len(trimesh_lis):
+        raise ValueError("More colors than meshes must be provided!")
+
     plotter = pyvista.Plotter()
     for i in range(len(trimesh_lis)):
         mesh = pyvista.wrap(trimesh_lis[i])
-        actor = plotter.add_mesh(mesh, color=col_sel[i])
+        actor = plotter.add_mesh(mesh, color = color_list[i])
     plotter.show()
 
 

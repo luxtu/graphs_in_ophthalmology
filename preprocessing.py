@@ -9,11 +9,16 @@ from scipy.sparse import dok_array
 
 def createGraph(nodesFile, edgesFile, index_addon = None):
     """ Creates an networkX undirected multigraph from provided csv files.
-    :nodesFile: A csv file containing information about the nodes
-    :edgesFile: A csv file containing information about the edges
-    :id: an identifier to avoid ambiguous combinations of graphs
 
-    :return G: A networkX multigraph object
+    Paramters
+    ---------
+    nodesFile: A csv file containing information about the nodes
+    edgesFile: A csv file containing information about the edges
+    id: an identifier to avoid ambiguous combinations of graphs
+
+    Returns
+    -------
+    G: A networkX multigraph object
     """
     if type(nodesFile) ==str and type(nodesFile) ==str :
         nodes = pd.read_csv(nodesFile, sep = ";", index_col= "id")
@@ -47,9 +52,15 @@ def createGraph(nodesFile, edgesFile, index_addon = None):
 
 def convertToEinfach(G_multi, self_loops = False, isolates = False):
     """ Creates an networkX simple graph from a networkX multigraph. Also removes all isolated nodes and self loops
-    :G_multi: A networkX graph object 
 
-    :return G: A simple networkX graph without selfloops, parallel edges and isolated nodes.
+    Paramters
+    ---------
+    G_multi: A networkX graph object 
+
+    -------
+    Returns
+
+    G: A simple networkX graph without selfloops, parallel edges and isolated nodes.
     """
     G_einfach = nx.Graph(G_multi)
     if not self_loops:
@@ -63,7 +74,10 @@ def convertToEinfach(G_multi, self_loops = False, isolates = False):
 
 def enrichNodeAttributes(G):
     """ Enriches the x. attribute of the nodes of a networkX graph with features extracted from the incident edges.
-    :G: A networkX graph object 
+
+    Paramters
+    ---------    
+    G: A networkX graph object 
     
     """
     feature_dict = {}
@@ -97,8 +111,11 @@ def enrichNodeAttributes(G):
 
 
 def graphSummary(G):
-    """ A method that prints out a quick summary of the characteristics of a networkX graph.
-    :G: A networkX graph object 
+    """ Prints out a quick summary of the characteristics of a networkX graph.
+
+    Paramters
+    ---------
+    G: A networkX graph object 
 
     """
     nodeNum = G.order()
@@ -120,6 +137,17 @@ def graphSummary(G):
 
 
 def scalePosition(df, scaleVector):
+    """ Scales the position encoding attributes in a node dataframe.
+
+    Paramters
+    ---------
+    df: A pandas dataframe with node infromation
+    scaleVector: A 3D vector with the scaling information for x, y, z
+
+    Returns
+    -------
+    df: A scaled dataframe
+    """
     df["pos_x"] = df["pos_x"]*scaleVector[0]
     df["pos_y"] = df["pos_y"]*scaleVector[1]
     df["pos_z"] = df["pos_z"]*scaleVector[2]
@@ -128,6 +156,16 @@ def scalePosition(df, scaleVector):
 
 
 def connected_components_dict(labels):
+    """ Takes connected components as list and return them as dict.
+
+    Paramters
+    ---------
+    df: Labels of connected components.
+
+    Returns
+    -------
+    con_comp: A dictionary with the values lists corresponing to connected components.
+    """
     con_comp = {}
     for i in range(len(labels)):
         try:
@@ -140,6 +178,21 @@ def connected_components_dict(labels):
 
 
 def relevant_connected_components(con_comp, node1_size, labels, rel_th = 1):
+    """ Takes connected components as dict and returns only the components that are bigger than the threshold rel_th.
+    Additionally the node1_size encodes the start of the second group in the connected components list. Labels is then used to change the names of the nodes in the CCs according to their group.
+
+    Paramters
+    ---------
+    con_comp: A dicitonary for connected components
+    node1_size: Indicator where two node groups are split
+    labels: Name Addons for the two groups
+    rel_th: A threshold indicating which connected components should be regarded
+
+    Returns
+    rel_comp: A dictionary containing the relevant (by threshold) connected components with changed name.
+    -------
+
+    """
     rel_comp = {}
     for k, v in con_comp.items():
         if len(v)>rel_th:
@@ -156,6 +209,21 @@ def relevant_connected_components(con_comp, node1_size, labels, rel_th = 1):
 
 
 def relable_edges_nodes(edges, nodes, index_addon):
+    """ Changes the name columns in edges and node files.
+
+    Paramters
+    ---------
+    edges: Dataframe containing the edge information of a graph
+    nodes: Dataframe containing the node information of a graph
+    index_addon: A string that is attached to all columns relevant for naming entities. 
+
+
+    Returns
+    edges: Dataframe for edge information with changed name
+    nodes: Dataframe for node information with changed name
+    -------
+
+    """
     idx = list(nodes.index)
     idx_new = [str(elem) + index_addon for elem in idx]
     nodes.index = idx_new
@@ -167,6 +235,20 @@ def relable_edges_nodes(edges, nodes, index_addon):
 
 
 def distance_based_adjacency(nodes_1, nodes_2, th):
+    """ Returns a sparse adjacency matrix containing pairs of nodes from two sets that have a distance below a certain threshold. 
+
+    Paramters
+    ---------
+    nodes_1: A dataframe containing node information
+    nodes_2: A dataframe containing node information
+    th: A distance threshold
+
+
+    Returns
+    adjMcsr: The resulting adjacencey values. Weights indicate the distance between the node pairs.
+    -------
+
+    """
 
     dist_mat_sparse = network_sparse_distance_matrix(nodes_1, nodes_2, th)
     adjM = dok_array((nodes_1.shape[0]+ nodes_2.shape[0], nodes_1.shape[0]+ nodes_2.shape[0]), dtype=np.uint8)
@@ -181,6 +263,20 @@ def distance_based_adjacency(nodes_1, nodes_2, th):
 
 
 def network_sparse_distance_matrix(nodes_1, nodes_2, th):
+    """ Returns a sparse distance matrix for two node sets with a given threshold for relevant conncetions.
+
+    Paramters
+    ---------
+    nodes_1: A dataframe containing node information
+    nodes_2: A dataframe containing node information
+    th: A distance threshold
+
+
+    Returns
+    dist_mat_sparse: The resulting sparse distance matrix.
+    -------
+
+    """
 
     points_1 = np.array(nodes_1[["pos_x","pos_y","pos_z"]])
     points_2 = np.array(nodes_2[["pos_x","pos_y","pos_z"]])
@@ -192,96 +288,3 @@ def network_sparse_distance_matrix(nodes_1, nodes_2, th):
 
     return dist_mat_sparse
 
-
-
-def connection_edges(nodes_1, nodes_2, th):
-
-    dist_mat_sparse = network_sparse_distance_matrix(nodes_1, nodes_2, th = th)
-    indices = dist_mat_sparse.keys()
-
-    df = pd.DataFrame(data = list(indices))
-
-    df.columns = ["node1id", "node2id"]
-    new_edges = pd.merge(pd.merge(nodes_1, df, left_on='id', right_on='node1id'),nodes_2, left_on = "node2id", right_on = "id")
-    new_edges = new_edges.drop(columns = ['degree_x', 'isAtSampleBorder_x', 'degree_y', 'isAtSampleBorder_y'])
-
-    return new_edges
-
-
-
-
-
-def contractEdges(rel_edges, G):
-    node_transfer = {}
-    pbar = tqdm(total=rel_edges.shape[0])
-    for idxR, edge in rel_edges.iterrows():
-        pbar.update(1)
-        try:
-            G = nx.contracted_nodes(G, edge["node1id"], edge["node2id"])
-
-            #node = G.nodes[edge["node1id"]]
-            #posA = np.array(node["pos"])
-            #posB = np.array(node["contraction"][edge["node2id"]]["pos"])
-            #node["pos"] = tuple((posA+posB)/2)
-            #del node["contraction"]
-
-            node_transfer[edge["node2id"]] = edge["node1id"]
-        except KeyError:
-            G = nx.contracted_nodes(G, edge["node1id"], node_transfer[edge["node2id"]])
-
-            #node = G.nodes[edge["node1id"]]
-            #posA = np.array(node["pos"])
-            #posB = np.array(node["contraction"][node_transfer[edge["node2id"]]]["pos"])
-            #node["pos"] = tuple((posA+posB)/2)
-            #del node["contraction"]
-
-            node_transfer[edge["node2id"]] = edge["node1id"]
-    pbar.close()
-
-    # give the connecting edges a new name
-    merge_nodes = set(node_transfer.values())
-    merge_node_names = np.arange(0, len(merge_nodes))
-    merge_node_names = [str(elem)+ "c" for elem in merge_node_names]
-    merge_node_dict = dict(zip(merge_nodes, merge_node_names))
-    G = nx.relabel_nodes(G, merge_node_dict)
-
-
-    transfer_dict = {k:set() for k in merge_node_names}
-    for k,v in node_transfer.items():
-        try:
-            key =  merge_node_dict[k]
-        except KeyError:
-            key = merge_node_dict[node_transfer[k]]
-        transfer_dict[key].add(k)
-        transfer_dict[key].add(v)
-
-    return G, transfer_dict
-
-
-
-def contractedCombinedGraph(G1, G2, nodes1csv, nodes2csv, th = 0.01):
-    # creating a new graph by combining the two networks
-    G_whole = nx.compose(G1, G2)
-    print("Before Contraction")
-    graphSummary(G_whole)
-
-    # loading edge informations
-    nodes1_df = pd.read_csv(nodes1csv, sep = ";", index_col= "id")
-    nodes2_df = pd.read_csv(nodes2csv, sep = ";", index_col= "id")
-
-    # creating a df for the connecting edges
-    con_edges = connection_edges(nodes1_df, nodes2_df, th)
-    rel_edges = con_edges[["node1id", "node2id"]]
-
-    # make the names unique for each network type
-    rel_edges['node1id'] = rel_edges['node1id'].apply(lambda x: str(x) + "n")
-    rel_edges['node2id'] = rel_edges['node2id'].apply(lambda x: str(x) + "l") 
-
-    # contract the connecting edges in the new graph
-    G_whole, transfer_dict = contractEdges(rel_edges, G_whole)
-
-
-    print("After Contraction")
-    graphSummary(G_whole)
-
-    return G_whole, transfer_dict

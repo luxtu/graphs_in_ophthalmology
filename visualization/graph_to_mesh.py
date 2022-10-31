@@ -4,15 +4,15 @@ import trimesh
 from scipy import sparse
 import multiprocessing
 from tqdm import tqdm
-from scipy.spatial import KDTree
+import multiprocessing as mp
 
 
 
 def rotation_matrix_from_vectors(vec1, vec2):
     """ Find the rotation matrix that aligns vec1 to vec2
-    :vec1: A 3d "source" vector
-    :vec2: A 3d "destination" vector
-    :return mat: A transform matrix (3x3) which when applied to vec1, aligns it with vec2.
+    vec1: A 3d "source" vector
+    vec2: A 3d "destination" vector
+    return mat: A transform matrix (3x3) which when applied to vec1, aligns it with vec2.
     """
     a, b = (vec1 / np.linalg.norm(vec1)).reshape(3), (vec2 / np.linalg.norm(vec2)).reshape(3)
     v = np.cross(a, b)
@@ -27,9 +27,9 @@ def rotation_matrix_from_vectors(vec1, vec2):
 
 def transform_from_rot_trans(rot_mat, trans_vec):
     """ Creates a 4x4 transformation matrix
-    :rot_mat: A 3x3 rotation matrix 
-    :trans_vex: A x,y,z translation vector
-    :return mat: A 4x4 transformation matrix
+    rot_mat: A 3x3 rotation matrix 
+    trans_vex: A x,y,z translation vector
+    return mat: A 4x4 transformation matrix
     """
     mat = np.eye(4)
     mat[0,3] = trans_vec[0]
@@ -241,17 +241,24 @@ def createNodesNx(G, nodes):
     """
     meshList = []
     node_rad = 0.005
-    
+
+    pbar = tqdm(total=len(nodes))
+    pbar.set_description("Creating " + str(len(nodes))+ " nodes")
     for node in nodes:
         pos = G.nodes[node]["pos"]
         mesh = trimesh.primitives.Sphere(center = pos, radius = node_rad)
         meshList.append(mesh)
+        pbar.update(1)
     return meshList
 
 
-def nodeMeshesNx(G):
+def nodeMeshesNx(G, concat = True, mask = None):
 
-    node_lis = np.array(list(G.nodes))
+    if mask is not None:
+        node_lis = np.array(G.nodes)[mask]
+    else:
+        node_lis = np.array(G.nodes)
+
     node_types = [elem[-1] for elem in node_lis]
     unique_nodes = np.unique(node_types)
 
@@ -259,7 +266,10 @@ def nodeMeshesNx(G):
     for label in unique_nodes:
         mask = [elem == label for elem in node_types]
         meshList = createNodesNx(G, node_lis[mask])
-        mesh = trimesh.util.concatenate(meshList)
+        if concat:
+            mesh = parallelConcat(meshList)
+        else:
+            mesh = meshList
         nodes_meshes.append(mesh)
 
     return nodes_meshes, unique_nodes
@@ -285,20 +295,32 @@ def createEdgeNx(G, edge):
 
     return meshE
 
+def parallelConcat(meshList):
+    if len(meshList) > 40:
+        pool = mp.Pool(4)
+        work = np.array_split(meshList, 4)
+        meshListMap = pool.map(trimesh.util.concatenate,work)
+        pool.close()
+        pool.join()
+        mesh = trimesh.util.concatenate(meshListMap)
+    else:
+        mesh = trimesh.util.concatenate(meshList)
+    return mesh
 
 
 def createEdgesNx(G, edges):
-
-
     meshList = []
+    pbar = tqdm(total=len(edges))
+    pbar.set_description("Creating " + str(len(edges))+ " edges")
     for edge in edges:
         if edge[0]!= edge[1]:
             mesh = createEdgeNx(G, edge)
             meshList.append(mesh)
+        pbar.update(1)
     return meshList
 
 
-def edgeMeshesNx(G):
+def edgeMeshesNx(G, concat = True):
 
     edgesList = list(G.edges)
 
@@ -316,7 +338,10 @@ def edgeMeshesNx(G):
     edge_meshes = [] 
     for k, edgeType in edge_dict.items():
         meshList = createEdgesNx(G, edgeType)
-        mesh = trimesh.util.concatenate(meshList)
+        if concat:
+            mesh = parallelConcat(meshList)
+        else:
+            mesh = meshList
         edge_meshes.append(mesh)
         unqiue_edges.append(hash_dict[k])
 
@@ -325,16 +350,20 @@ def edgeMeshesNx(G):
 
 def createMeshNX(G, combine = False):
     """ A function that creates a trimseh object corresponding to a provided networkX graph.
+
+    Parameters
+    ----------
     G: A networkX graph
+    combine: boolean indicating if node and edge mesh should be combined or not.
+
 
     """
-
-    nodeMeshes, unqiue_nodes = nodesMeshesNx(G)
+    nodeMeshes, unqiue_nodes = nodeMeshesNx(G)
     edgeMeshes, unqiue_nodes = edgeMeshesNx(G)
 
     if not combine:
         return nodeMeshes, edgeMeshes
 
     else:
-        return trimesh.util.concat(nodesMeshes+edgeMeshes)
+        return trimesh.util.concat(nodeMeshes+edgeMeshes)
 

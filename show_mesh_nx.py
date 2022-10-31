@@ -1,7 +1,4 @@
 import pandas as pd
-from scipy.spatial import KDTree
-from scipy.sparse import csr_matrix
-from scipy.sparse import dok_array
 from scipy.sparse.csgraph import connected_components
 import preprocessing as pp
 from visualization import graph_to_mesh, mesh_viewer
@@ -66,17 +63,21 @@ for idxE, edge in merged_edges.iterrows():
 # create a new graph based on the old information
 
 G_contract = pp.createGraph(merged_nodes, merged_edges)
-G_contract_einf = pp.convertToEinfach(G_contract, self_loops = False, isolates = True)
+G_contract_einf = pp.convertToEinfach(G_contract, self_loops = False, isolates = False)
 #pp.enrichNodeAttributes(G_contract_einf)
 
-
+print("now")
 nodeMeshes, unique_nodes = graph_to_mesh.nodeMeshesNx(G_contract_einf)
 edgeMeshes, unique_edges = graph_to_mesh.edgeMeshesNx(G_contract_einf)
 
 print(unique_nodes)
 print(unique_edges)
 
-mesh_viewer.gifList_trimesh(nodeMeshes + edgeMeshes, "test_animate")
+#showList_trimesh
+mesh_viewer.showList_trimesh(nodeMeshes + edgeMeshes)
+#mesh_viewer.gifList_trimesh(nodeMeshes + edgeMeshes, "test_animate")
+
+
 
 
 
