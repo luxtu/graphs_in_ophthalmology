@@ -98,9 +98,9 @@ def findConnectedComponents(nodes, edges):
 
 def createNodesFromList(nodes):
     """ A function that returns a list of meshes for each node in a pandas dataframe.
-    :nodes: A pandas dataframe with the node information
+    nodes: A pandas dataframe with the node information
 
-    :return meshList: A list of meshes for all the provided nodes.
+    return meshList: A list of meshes for all the provided nodes.
     """
     meshList = []
     node_rad = 0.005
@@ -112,10 +112,10 @@ def createNodesFromList(nodes):
 
 
 def createEdgesFromList(edges):
-    """ A function that returns a list of meshes for each edge in a pandas dataframe.
-    :edges: A pandas dataframe with the edge information. Edge information must contain start and end coordinates. 
+    """ Returns a list of meshes for each edge in a pandas dataframe.
+    edges: A pandas dataframe with the edge information. Edge information must contain start and end coordinates. 
 
-    :return meshList: A list of meshes for all the provided edges.
+    return meshList: A list of meshes for all the provided edges.
     """
     meshList = []
     for idxN, edge in edges.iterrows():
@@ -127,11 +127,11 @@ def createEdgesFromList(edges):
     
     
 def edges_with_node_info(nodes, edges):
-    """ A function that joins node and edge information.
-    :nodes: A pandas dataframe with the node information
-    :edges: A pandas dataframe with the edge information.
+    """ Joins node and edge information into a single dataframe.
+    nodes: A pandas dataframe with the node information
+    edges: A pandas dataframe with the edge information.
 
-    :return res: A pandas datframe that contains the start and end coordinates for each edge.
+    return res: A pandas datframe that contains the start and end coordinates for each edge.
     """
 
     edges_ext =pd.merge(pd.merge(nodes, edges, left_on='id', right_on='node1id'),nodes, left_on = "node2id", right_on = "id")
@@ -147,10 +147,14 @@ def edges_with_node_info(nodes, edges):
     
 
 def connectedComponentMeshMulti(args):
-    """ A function that creates a trimesh for a single connected component.
-    :args: A iterable with 2 objects, node information and egde information
+    """ Creates a trimesh for a single connected component.
+    Parameters
+    ----------
+    args: A iterable with 2 objects, node information and egde information
 
-    :return meshGlob: A single trimesh object that represents the graph of a single connected component
+    Returns
+    -------
+    meshGlob: A single trimesh object that represents the graph of a single connected component
     """
 
     nodes_comp = args[0]
@@ -199,11 +203,15 @@ def connectedComponentMeshMulti(args):
 
 
 def createMesh(nodes, edges):
-    """ A function that creates a trimesh object corresponding to the information provided in node and edge files.
-    :nodes: A pandas dataframe with the node information
-    :edges: A pandas dataframe with the edge information.
+    """ Creates a trimesh object corresponding to the information provided in node and edge files.
+    Parameters
+    ----------
+    nodes: A pandas dataframe with the node information
+    edges: A pandas dataframe with the edge information.
 
-    :return meshFinal: A single trimesh object that represents the full graph
+    Returns
+    -------
+    meshFinal: A single trimesh object that represents the full graph
     """
 
     # finds connected components with corresponding edge/node sets
@@ -233,14 +241,17 @@ def createMesh(nodes, edges):
 
     
 
-def createNodesNx(G, nodes):
+def createNodesNx(G, nodes, node_rad):
     """ A function that returns a list of meshes for each node in a pandas dataframe.
-    :nodes: A pandas dataframe with the node information
+    Parameters
+    ----------
+    nodes: A pandas dataframe with the node information
 
-    :return meshList: A list of meshes for all the provided nodes.
+    Returns
+    ----------
+    meshList: A list of meshes for all the provided nodes.
     """
     meshList = []
-    node_rad = 0.005
 
     pbar = tqdm(total=len(nodes))
     pbar.set_description("Creating " + str(len(nodes))+ " nodes")
@@ -252,8 +263,13 @@ def createNodesNx(G, nodes):
     return meshList
 
 
-def nodeMeshesNx(G, concat = True, mask = None):
-
+def nodeMeshesNx(G, concat = True, mask = None, node_rad = 0.005):
+    """
+    Parameters
+    ----------
+    Returns
+    -------
+    """
     if mask is not None:
         node_lis = np.array(G.nodes)[mask]
     else:
@@ -262,23 +278,31 @@ def nodeMeshesNx(G, concat = True, mask = None):
     node_types = [elem[-1] for elem in node_lis]
     unique_nodes = np.unique(node_types)
 
+    nodes_meshes_identifiers = []
     nodes_meshes = []
     for label in unique_nodes:
         mask = [elem == label for elem in node_types]
-        meshList = createNodesNx(G, node_lis[mask])
+        meshList = createNodesNx(G, node_lis[mask],node_rad)
         if concat:
             mesh = parallelConcat(meshList)
         else:
             mesh = meshList
+            meshIdentList = node_lis[mask]
+            nodes_meshes_identifiers.append(meshIdentList)
         nodes_meshes.append(mesh)
 
-    return nodes_meshes, unique_nodes
+
+    return nodes_meshes, unique_nodes, nodes_meshes_identifiers
 
 
 
-def createEdgeNx(G, edge):
-
-    edge_rad = 0.0025
+def createEdgeNx(G, edge, edge_rad):
+    """
+    Parameters
+    ----------
+    Returns
+    -------
+    """
 
     node1_pos = np.array(G.nodes[edge[0]]["pos"])
     node2_pos = np.array(G.nodes[edge[1]]["pos"])
@@ -295,35 +319,35 @@ def createEdgeNx(G, edge):
 
     return meshE
 
-def parallelConcat(meshList):
-    if len(meshList) > 40:
-        pool = mp.Pool(4)
-        work = np.array_split(meshList, 4)
-        meshListMap = pool.map(trimesh.util.concatenate,work)
-        pool.close()
-        pool.join()
-        mesh = trimesh.util.concatenate(meshListMap)
-    else:
-        mesh = trimesh.util.concatenate(meshList)
-    return mesh
 
 
-def createEdgesNx(G, edges):
+def createEdgesNx(G, edges, edge_rad):
+    """
+    Parameters
+    ----------
+    Returns
+    -------
+    """
     meshList = []
     pbar = tqdm(total=len(edges))
     pbar.set_description("Creating " + str(len(edges))+ " edges")
     for edge in edges:
         if edge[0]!= edge[1]:
-            mesh = createEdgeNx(G, edge)
+            mesh = createEdgeNx(G, edge, edge_rad)
             meshList.append(mesh)
         pbar.update(1)
     return meshList
 
 
-def edgeMeshesNx(G, concat = True):
 
+def edgeMeshesNx(G, concat = True, edge_rad = 0.0025):
+    """
+    Parameters
+    ----------
+    Returns
+    -------
+    """
     edgesList = list(G.edges)
-
     hash_dict = {}
     edge_dict = {}
     for edge in edgesList:
@@ -337,7 +361,7 @@ def edgeMeshesNx(G, concat = True):
     unqiue_edges = []
     edge_meshes = [] 
     for k, edgeType in edge_dict.items():
-        meshList = createEdgesNx(G, edgeType)
+        meshList = createEdgesNx(G, edgeType, edge_rad)
         if concat:
             mesh = parallelConcat(meshList)
         else:
@@ -356,6 +380,8 @@ def createMeshNX(G, combine = False):
     G: A networkX graph
     combine: boolean indicating if node and edge mesh should be combined or not.
 
+    Returns
+    -------
 
     """
     nodeMeshes, unqiue_nodes = nodeMeshesNx(G)
@@ -366,4 +392,27 @@ def createMeshNX(G, combine = False):
 
     else:
         return trimesh.util.concat(nodeMeshes+edgeMeshes)
+
+
+def parallelConcat(meshList, workers = 4):
+    """
+    Parameters
+    ----------
+    meshList: A list of trimesh objects. 
+    workers: Number of workers for parallelization
+
+    Returns
+    -------
+    A concatenated trimesh
+    """
+    if len(meshList) > 40:
+        pool = mp.Pool(workers)
+        work = np.array_split(meshList, 4)
+        meshListMap = pool.map(trimesh.util.concatenate,work)
+        pool.close()
+        pool.join()
+        mesh = trimesh.util.concatenate(meshListMap)
+    else:
+        mesh = trimesh.util.concatenate(meshList)
+    return mesh
 
