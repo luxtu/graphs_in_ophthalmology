@@ -15,15 +15,15 @@ class nodeClassifier():
     def train(self, nxG, train_mask):
         self.model.train()
         self.optimizer.zero_grad()  # Clear gradients.
-        out = self.model(nxG.x[:,self.features], nxG.edge_index)  # Perform a single forward pass.
-        loss = self.lossFunc(out[train_mask], nxG.y[train_mask])  # Compute the loss solely based on the training nodes.
+        out = self.model(nxG.x[:,self.features].float(), nxG.edge_index)  # Perform a single forward pass.
+        loss = self.lossFunc(out[train_mask].float(), nxG.y[train_mask])  # Compute the loss solely based on the training nodes.
         loss.backward()  # Derive gradients.
         self.optimizer.step()  # Update parameters based on gradients.
         return loss
 
     def test(self, nxG, test_mask):
         self.model.eval()
-        out = self.model(nxG.x[:,self.features], nxG.edge_index)
+        out = self.model(nxG.x[:,self.features].float(), nxG.edge_index)
         pred = out.argmax(dim=1)  # Use the class with highest probability.
         test_correct = pred[test_mask] == nxG.y[test_mask]  # Check against ground-truth labels.
         test_acc = int(test_correct.sum()) / len(test_mask)  # Derive ratio of correct predictions.
@@ -31,7 +31,7 @@ class nodeClassifier():
 
     def predictions(self, nxG, test_mask):
         self.model.eval()
-        out = self.model(nxG.x[:,self.features], nxG.edge_index)
+        out = self.model(nxG.x[:,self.features].float(), nxG.edge_index)
         pred = out.argmax(dim=1)  # Use the class with highest probability.
         test_correct = pred[test_mask] == nxG.y[test_mask]  # Check against ground-truth labels.
         return test_correct    
@@ -46,13 +46,19 @@ class GCN_NC(torch.nn.Module):
         super().__init__()
         torch.manual_seed(1234567)
         self.conv1 = GCNConv(in_features, hidden_channels)
-        self.conv2 = GCNConv(hidden_channels, classes)
+        self.conv2 = GCNConv(hidden_channels, hidden_channels)
+        self.conv3 = GCNConv(hidden_channels, hidden_channels)
+        self.conv4 = GCNConv(hidden_channels, classes)
 
     def forward(self, x, edge_index):
         x = self.conv1(x, edge_index)
         x = x.relu()
-        x = F.dropout(x, p=0.5, training=self.training)
         x = self.conv2(x, edge_index)
+        x = x.relu()
+        x = self.conv3(x, edge_index)
+        x = x.relu()
+        x = F.dropout(x, p=0.5, training=self.training)
+        x = self.conv4(x, edge_index)
         return x
 
 
