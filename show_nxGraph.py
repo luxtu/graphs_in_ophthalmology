@@ -64,18 +64,22 @@ for idxE, edge in merged_edges.iterrows():
 
 G_contract = pp.createGraph(merged_nodes, merged_edges)
 G_contract_einf = pp.convertToEinfach(G_contract, self_loops = False, isolates = False)
+
+
+
+mesh_viewer.renderNXGraph(G_contract_einf, vtk = 0)
 #pp.enrichNodeAttributes(G_contract_einf)
-
-print("now")
-nodeMeshes, unique_nodes = graph_to_mesh.nodeMeshesNx(G_contract_einf)
-edgeMeshes, unique_edges = graph_to_mesh.edgeMeshesNx(G_contract_einf)
-
-print(unique_nodes)
-print(unique_edges)
-
-#showList_trimesh
-mesh_viewer.showList_trimesh(nodeMeshes + edgeMeshes)
-#mesh_viewer.gifList_trimesh(nodeMeshes + edgeMeshes, "test_animate")
+#
+#print("now")
+#nodeMeshes, unique_nodes = graph_to_mesh.nodeMeshesNx(G_contract_einf)
+#edgeMeshes, unique_edges = graph_to_mesh.edgeMeshesNx(G_contract_einf)
+#
+#print(unique_nodes)
+#print(unique_edges)
+#
+##showList_trimesh
+#mesh_viewer.showList_trimesh(nodeMeshes + edgeMeshes)
+##mesh_viewer.gifList_trimesh(nodeMeshes + edgeMeshes, "test_animate")
 
 
 

@@ -202,7 +202,7 @@ def connectedComponentMeshMulti(args):
 
 
 
-def createMesh(nodes, edges):
+def createMesh(nodes, edges, cc = True):
     """ Creates a trimesh object corresponding to the information provided in node and edge files.
     Parameters
     ----------
@@ -215,7 +215,10 @@ def createMesh(nodes, edges):
     """
 
     # finds connected components with corresponding edge/node sets
-    numComp, setsNodes, setsEdges = findConnectedComponents(nodes, edges)
+    if cc:
+        numComp, setsNodes, setsEdges = findConnectedComponents(nodes, edges)
+    else:
+        numComp, setsNodes, setsEdges = 1, [np.arange(nodes.shape[0])], [np.arange(edges.shape[0])]
 
     # creates a task for each connected component
     work = []
