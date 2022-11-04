@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from  models import nodeClassifier
-from visualization import graph_to_mesh
+from visualization import graph_to_mesh, mesh_viewer
 from torch_geometric.utils.convert import from_networkx
 import pyvista
 from tqdm import tqdm
@@ -57,8 +57,32 @@ def handleInput(indicator):
 
     return indicator
 
+import networkx as nx
+def classifiedGraph(G,test_mask_np, pred_mask):
+    nodes = np.array(list(G.nodes))
+    relevant_nodes = nodes[test_mask_np]
 
-def visualizedTraining(G, Classifier, interactive = False):
+    pred_dict = {}
+    pred_dict[0] = "f"
+    pred_dict[1] = "r"
+    new_names = {}
+    for i, node_name in enumerate(relevant_nodes):
+
+
+        lab = node_name[-1]
+        if lab not in ("f", "r"):
+            new_node_name = node_name + pred_dict[pred_mask[i]]
+            new_names[node_name] = new_node_name
+        elif lab != pred_dict[pred_mask[i]]:
+            new_node_name = node_name[:len(node_name)-1] + pred_dict[pred_mask[i]]#+ pred_reverse[pred_mask[i]]
+            new_names[node_name] = new_node_name
+
+    G_class = nx.relabel_nodes(G, new_names)
+
+    return G_class
+
+
+def visualizedTrainingMesh(G, Classifier, interactive = False):
 
 
     class_assign = createClassLabels(G)
@@ -156,4 +180,42 @@ def visualizedTraining(G, Classifier, interactive = False):
             indicator = handleInput(input("Enter number of epochs to skip..."))
 
         plotter.update()
+
+
+
+
+
+def visualizedTraining(G, Classifier,epochs = 100, interactive = False):
+
+
+    class_assign = createClassLabels(G)
+    node_num = G.order()
+
+    # create the training and testing masks
+    train_mask_np = np.random.choice(np.arange(0, node_num), size= int(node_num*0.8), replace = False)
+    test_mask_np = np.delete(np.arange(0, node_num), train_mask_np)
+
+    # convert to torch tensor objects
+    train_mask= torch.tensor(train_mask_np)
+    test_mask= torch.tensor(test_mask_np)
+
+    # convert the graph to a networkx graph
+    networkXG = from_networkx(G)
+    networkXG.y = torch.tensor(class_assign)
+
+    input("Press enter to start with the first epoch...")
+
+    for epoch in range(1, epochs +1):
+        loss = Classifier.train(networkXG, train_mask)
+        #test_acc = Classifier.test(networkXG, test_mask)
+        #acc_l[epoch-1, i] = test_acc
+
+        pred_mask = Classifier.predictions(networkXG, test_mask).detach().numpy()
+        G_class = classifiedGraph(G, test_mask_np,pred_mask)
+        epoch_text = "Epoch "+ str(epoch) + ".png"
+
+
+        mesh_viewer.renderNXGraph(G_class, pic = epoch_text)
+        print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}')
+
 

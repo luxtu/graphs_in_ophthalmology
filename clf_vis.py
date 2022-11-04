@@ -92,5 +92,5 @@ modelWC = nodeClassifier.nodeClassifier(netWC, hidden_channels=32, features = np
 
 
 
-visualized_training.visualizedTraining(G_contract_einf, modelSAGE, interactive = True)
+visualized_training.visualizedTraining(G_contract_einf, modelSAGE,epochs = 100,  interactive = True)
 
