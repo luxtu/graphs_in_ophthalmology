@@ -1,13 +1,13 @@
 import pandas as pd
 from scipy.sparse.csgraph import connected_components
-import preprocessing as pp
+import preprocessing.preprocessing as pp
 from visualization import graph_to_mesh, mesh_viewer
 
-nodesFileNerve =  "~/Documents/Intestine/nerve-mask/nodes_nerve_bs2.csv"
-edgesFileNerve = "~/Documents/Intestine/nerve-mask/edges_nerve_bs2.csv"
+nodesFileNerve =  "~/Documents/Intestine/nerve-mask/nodes_nerve_bs2_fh.csv"
+edgesFileNerve = "~/Documents/Intestine/nerve-mask/edges_nerve_bs2_fh.csv"
 
-nodesFileLymph =  "~/Documents/Intestine/lymph-mask/nodes_lymph_bs2.csv"
-edgesFileLymph = "~/Documents/Intestine/lymph-mask/edges_lymph_bs2.csv"
+nodesFileLymph =  "~/Documents/Intestine/lymph-mask/nodes_lymph_bs2_fh.csv"
+edgesFileLymph = "~/Documents/Intestine/lymph-mask/edges_lymph_bs2_fh.csv"
 
 nodes_n = pd.read_csv(nodesFileNerve, sep = ";", index_col= "id")
 edges_n = pd.read_csv(edgesFileNerve, sep = ";", index_col= "id")
@@ -19,12 +19,13 @@ edges_l = pd.read_csv(edgesFileLymph, sep = ";", index_col= "id")
 nodes_l = pp.scalePosition(nodes_l, (1.65,1.65,6))
 nodes_n = pp.scalePosition(nodes_n, (1.65,1.65,6))
 
+
 # giving nodes from different files unique names
 edges_n, nodes_n = pp.relable_edges_nodes(edges_n, nodes_n, "n")
 edges_l, nodes_l = pp.relable_edges_nodes(edges_l, nodes_l, "l")
 
 
-adjMcsr = pp.distance_based_adjacency(nodes_n, nodes_l, th = 0.03)
+adjMcsr = pp.distance_based_adjacency(nodes_n, nodes_l, th = 0.01)
 num, labels = connected_components(csgraph=adjMcsr, directed = False)
 con_comp = pp.connected_components_dict(labels)
 rel_comp = pp.relevant_connected_components(con_comp, nodes_n.shape[0], ("n","l"))
@@ -62,12 +63,37 @@ for idxE, edge in merged_edges.iterrows():
 
 # create a new graph based on the old information
 
+
 G_contract = pp.createGraph(merged_nodes, merged_edges)
 G_contract_einf = pp.convertToEinfach(G_contract, self_loops = False, isolates = False)
 
+###########################################
+import graph_matching.graph_matching as gm
 
+nodesFileComb =  "~/Documents/Intestine/combined-mask/nodes_bs2_fh.csv"
+edgesFileComb = "~/Documents/Intestine/combined-mask/edges_bs2_fh.csv"
+
+nodes_c = pd.read_csv(nodesFileComb, sep = ";", index_col= "id")
+edges_c = pd.read_csv(edgesFileComb, sep = ";", index_col= "id")
+
+print(nodes_c.shape[0])
+print(edges_c.shape[0])
+
+# scaling with the factors provided by luciano
+nodes_c = pp.scalePosition(nodes_c, (1.65,1.65,6))
+
+
+G_contract_comb = pp.createGraph(nodes_c, edges_c)
+G_contract_einf_comb = pp.convertToEinfach(G_contract_comb, self_loops = False, isolates = False)
+
+G_contract_einf_comb_relab = gm.nearestNeighborLabeling(G_contract_einf, G_contract_einf_comb)
+
+#mesh_viewer.renderNXGraph(G_contract_einf_comb_relab, vtk = 0)
+###########################################
 
 mesh_viewer.renderNXGraph(G_contract_einf, vtk = 0)
+
+
 #pp.enrichNodeAttributes(G_contract_einf)
 #
 #print("now")
