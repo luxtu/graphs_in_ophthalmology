@@ -2,6 +2,7 @@ import pandas as pd
 from scipy.sparse.csgraph import connected_components
 import preprocessing.preprocessing as pp
 from visualization import graph_to_mesh, mesh_viewer
+import graph_matching.graph_matching as gm
 
 nodesFileNerve =  "~/Documents/Intestine/nerve-mask/nodes_nerve_bs2_fh.csv"
 edgesFileNerve = "~/Documents/Intestine/nerve-mask/edges_nerve_bs2_fh.csv"
@@ -24,7 +25,7 @@ nodes_n = pp.scalePosition(nodes_n, (1.65,1.65,6))
 edges_n, nodes_n = pp.relable_edges_nodes(edges_n, nodes_n, "n")
 edges_l, nodes_l = pp.relable_edges_nodes(edges_l, nodes_l, "l")
 
-
+# contracting very close nodes
 adjMcsr = pp.distance_based_adjacency(nodes_n, nodes_l, th = 0.01)
 num, labels = connected_components(csgraph=adjMcsr, directed = False)
 con_comp = pp.connected_components_dict(labels)
@@ -34,8 +35,6 @@ reverse_dict= {}
 for k, v in rel_comp.items():
     for val in v:
         reverse_dict[val] = k
-
-
 
 merged_nodes = pd.concat([nodes_l.loc[:,["pos_x", "pos_y", "pos_z"]], nodes_n.loc[:,["pos_x", "pos_y", "pos_z"]]])
 new_nodes = pd.DataFrame(columns=merged_nodes.columns )
@@ -47,11 +46,13 @@ for k, valList in rel_comp.items():
     new_nodes.loc[k] = merged_nodes.loc[valList].mean()
     merged_nodes.drop(valList, inplace = True)
 
+
 # concat the all nodes and the new nodes
 merged_nodes = pd.concat([merged_nodes, new_nodes])
 
-# createa a combined edge file
+# create a combined edge file
 merged_edges = pd.concat([edges_l, edges_n], ignore_index = True)
+
 
 # change the names of the edges to the new names
 for idxE, edge in merged_edges.iterrows():
@@ -61,23 +62,18 @@ for idxE, edge in merged_edges.iterrows():
         merged_edges.loc[idxE,"node2id"] = reverse_dict[edge["node2id"]]
 
 
-# create a new graph based on the old information
-
-
+# create a new graph with contracted nodes
 G_contract = pp.createGraph(merged_nodes, merged_edges)
 G_contract_einf = pp.convertToEinfach(G_contract, self_loops = False, isolates = False)
 
 ###########################################
-import graph_matching.graph_matching as gm
+
 
 nodesFileComb =  "~/Documents/Intestine/combined-mask/nodes_bs2_fh.csv"
 edgesFileComb = "~/Documents/Intestine/combined-mask/edges_bs2_fh.csv"
 
 nodes_c = pd.read_csv(nodesFileComb, sep = ";", index_col= "id")
 edges_c = pd.read_csv(edgesFileComb, sep = ";", index_col= "id")
-
-print(nodes_c.shape[0])
-print(edges_c.shape[0])
 
 # scaling with the factors provided by luciano
 nodes_c = pp.scalePosition(nodes_c, (1.65,1.65,6))

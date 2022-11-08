@@ -288,3 +288,56 @@ def network_sparse_distance_matrix(nodes_1, nodes_2, th):
 
     return dist_mat_sparse
 
+
+def getLablesForDual(D, node_lab = None):
+    # combines hashval to class
+    if node_lab is None:
+         node_lab =  {}
+         class_label = len(list(node_lab.keys()))-1
+    else:
+        class_label = -1
+
+    # combines class label to type incident node 
+    node_class_comb = {}
+
+    class_label_list = []
+    for k, node in D.nodes.items():
+        hashval = hash(k[0][-1]) + hash(k[1][-1])
+        try:
+            class_label_list.append(node_lab[hashval])
+        except KeyError:
+            class_label = class_label +1
+            node_class_comb[class_label] = (k[0][-1], k[1][-1])
+            node_lab[hashval] = class_label
+            class_label_list.append(node_lab[hashval])
+
+    return class_label_list, node_lab, node_class_comb
+
+
+
+def makeDual(G):
+    """ Returns the dual graph of a given networkX graph.
+
+    Paramters
+    ---------
+    G: A networkX graph
+
+    Returns
+    D: The dual graph
+    -------
+
+    """
+    D = nx.line_graph(G)
+    dual_node_features ={}
+    dual_node_centers = {}
+    for edge in G.edges:
+        dual_node_features[edge] = G.edges[edge]["x"]
+        posA = np.array(G.nodes[edge[0]]["pos"])
+        posB = np.array(G.nodes[edge[1]]["pos"])
+        edge_cent = (posA + posB) /2
+        dual_node_centers[edge] = edge_cent
+    
+    nx.set_node_attributes(D, dual_node_features, name = "x")
+    nx.set_node_attributes(D, dual_node_centers, name = "pos")
+
+    return D

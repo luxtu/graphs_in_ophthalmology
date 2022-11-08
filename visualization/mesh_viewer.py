@@ -165,35 +165,15 @@ def gifList_trimesh(trimesh_lis, gif_name):
     plotter.close()
 
 
-
-
-
-
-def renderNXGraph(G, vtk = False,  pic = None):
-    nodes = list(G.nodes)
-    edges = list(G.edges)
-
-    # define the number of classes and create a dict that connects label to name
-    node_classes = np.unique([elem[-1] for elem in nodes])
-    class_num = len(node_classes)
-    labelDict = dict(zip(node_classes, np.arange(class_num)))
-
-    if not "f" in node_classes:
-        class_num = class_num+1
-        labelDict["f"] = class_num-1
-    if not "r" in node_classes:
-        class_num = class_num+1
-        labelDict["r"] = class_num-1
-
-
+def createPrimalLUT(class_num, label_dict):
     # create the lookup table for the
-    bw_lut = vtkLookupTable()
+    lut = vtkLookupTable()
     m_mask_opacity = 1
-    bw_lut.SetRange(0, 4)
-    bw_lut.SetRampToLinear()
-    bw_lut.SetValueRange(0, 1)
-    bw_lut.SetHueRange(0, 0)
-    bw_lut.SetSaturationRange(0, 0)
+    lut.SetRange(0, 4)
+    lut.SetRampToLinear()
+    lut.SetValueRange(0, 1)
+    lut.SetHueRange(0, 0)
+    lut.SetSaturationRange(0, 0)
 
     colors = vtkNamedColors()
     green = colors.GetColor3d("Green")
@@ -202,21 +182,92 @@ def renderNXGraph(G, vtk = False,  pic = None):
     magenta = colors.GetColor3d("Magenta")
     cyan = colors.GetColor3d("Cyan")
 
-    bw_lut.SetNumberOfTableValues(class_num)
-    bw_lut.SetTableValue(labelDict["n"], magenta[0], magenta[1], magenta[2], m_mask_opacity)  # RED
-    bw_lut.SetTableValue(labelDict["l"], yellow[0], yellow[1], yellow[2], m_mask_opacity)
-    bw_lut.SetTableValue(labelDict["c"], cyan[0], cyan[1], cyan[2], m_mask_opacity)
-    bw_lut.SetTableValue(labelDict["f"], red[0], red[1], red[2], m_mask_opacity)
-    bw_lut.SetTableValue(labelDict["r"], green[0], green[1], green[2], m_mask_opacity)
-    bw_lut.Build()
+    color_list = [magenta, yellow, cyan, red, green]
+    label_addon_list = ["n", "l", "c", "f", "r"]
+
+
+    lut.SetNumberOfTableValues(class_num)
+
+    for i, act_color in enumerate(color_list):
+        try:
+            lut.SetTableValue(label_dict[label_addon_list[i]], act_color[0], act_color[1], act_color[2], m_mask_opacity)
+        except KeyError:
+            continue
+
+    lut.Build()
+
+    return lut
+
+
+def createDualLUT(class_num, label_dict):
+    # create the lookup table for the
+    lut = vtkLookupTable()
+    m_mask_opacity = 1
+    lut.SetRange(0, 4)
+    lut.SetRampToLinear()
+    lut.SetValueRange(0, 1)
+    lut.SetHueRange(0, 0)
+    lut.SetSaturationRange(0, 0)
+
+    colors = vtkNamedColors()
+    green = colors.GetColor3d("Green")
+    yellow = colors.GetColor3d("Yellow")
+    red = colors.GetColor3d("Red")
+    magenta = colors.GetColor3d("Magenta")
+    cyan = colors.GetColor3d("Cyan")
+
+    color_list = [magenta, yellow, cyan]
+    label_addon_list = [hash("n") *2 , hash("l") *2 , hash("n") + hash("l")]
+
+    lut.SetNumberOfTableValues(class_num)
+
+    for i, act_color in enumerate(color_list):
+        try:
+            lut.SetTableValue(label_dict[label_addon_list[i]], act_color[0], act_color[1], act_color[2], m_mask_opacity)
+        except KeyError:
+            continue
+
+    lut.Build()
+
+    return lut
 
 
 
-    point_cloud = VtkPointCloud(bw_lut, zMin =0, zMax = class_num)
+
+
+def renderNXGraph(G, dual = False, vtk = False,  pic = None, backend = False):
+    nodes = list(G.nodes)
+    edges = list(G.edges)
+
+    # define the number of classes and create a dict that connects label to name
+    if not dual:
+        node_classes = np.unique([elem[-1] for elem in nodes])
+        class_num = len(node_classes)
+        labelDict = dict(zip(node_classes, np.arange(class_num)))
+
+        if not "f" in node_classes:
+            class_num = class_num+1
+            labelDict["f"] = class_num-1
+        if not "r" in node_classes:
+            class_num = class_num+1
+            labelDict["r"] = class_num-1
+
+        lut = createPrimalLUT(class_num, labelDict)
+
+    else:
+        #class_dict = dict(zip(np.array([hash("n") *2 , hash("l") *2 , hash("n") + hash("l")]), np.arange(3)))
+        node_classes = np.unique([hash(elem[0][-1]) + hash(elem[1][-1]) for elem in nodes])
+        class_num = len(node_classes)
+        labelDict = dict(zip(node_classes, np.arange(class_num)))
+
+        lut = createDualLUT(class_num, labelDict)
+
+
+
+    point_cloud = VtkPointCloud(lut, zMin =0, zMax = class_num)
     points = vtkPoints()
 
     vertex_dict = {}
-    edge_dict = {}
 
     labels = vtkIntArray()
     labels.SetName("Labels")
@@ -229,7 +280,9 @@ def renderNXGraph(G, vtk = False,  pic = None):
     #create node labels for visualization and vertices 
     for i, node in enumerate(nodes):
         # label creation
-        val = labelDict[node[-1]]
+        key = node[-1] if not dual else hash(node[0][-1]) + hash(node[1][-1])
+
+        val = labelDict[key]
         labels.InsertNextValue(val)
 
         # graph node creation
@@ -250,14 +303,17 @@ def renderNXGraph(G, vtk = False,  pic = None):
 
     other_scalars = vtkIntArray()
     other_scalars.SetName("Other")
-    other_scalarsL = []
 
     for edge in edges: 
         node1 = edge[0]
         node2 = edge[1]
 
-        n1 = labelDict[node1[-1]]
-        n2 = labelDict[node2[-1]]
+        if not dual:
+            n1 = labelDict[node1[-1]]
+            n2 = labelDict[node2[-1]]
+        else: 
+            n1 = labelDict[hash(node1[0][-1]) + hash(node1[1][-1])]
+            n2 = labelDict[hash(node2[0][-1]) + hash(node2[1][-1])]
 
         line = vtkLine()
         line.GetPointIds().SetId(0, vertex_dict[node1])
@@ -269,7 +325,6 @@ def renderNXGraph(G, vtk = False,  pic = None):
             color_val = max(n1,n2)
         line_color.InsertNextValue(color_val)
         other_scalars.InsertNextValue(1)
-        other_scalarsL.append(1)
 
 
     # create polydata representing the lines
@@ -292,7 +347,7 @@ def renderNXGraph(G, vtk = False,  pic = None):
     mapperGraph.SetColorModeToDefault()
     mapperGraph.SetScalarRange(0, class_num)
     mapperGraph.SetScalarVisibility(1)
-    mapperGraph.SetLookupTable(bw_lut)
+    mapperGraph.SetLookupTable(lut)
 
 
     # adjust the settings for the graph actor (will represent only edges in the rendering)
@@ -315,7 +370,7 @@ def renderNXGraph(G, vtk = False,  pic = None):
         # Add the actor graph actor and the point cloud actors to the scene
         renderer.AddActor(actor)
         renderer.AddActor(point_cloud.vtkActor)
-        renderer.SetBackground(colors.GetColor3d('White'))
+        renderer.SetBackground((0,0,0))
         renderWindow.SetWindowName('Vessel Stuff')
         mapperGraph.Update()
         renderWindow.Render()
@@ -324,6 +379,9 @@ def renderNXGraph(G, vtk = False,  pic = None):
     else:
         pyvista.global_theme.edge_color = 'blue'
         pyvista.set_plot_theme('paraview')
+        if backend != False:
+            pyvista.set_jupyter_backend('static')  
+        
         p = pyvista.Plotter()
         pvActor, props = p.add_actor(actor)
         pvActorPC, propsPC = p.add_actor(point_cloud.vtkActor)
@@ -339,6 +397,7 @@ def renderNXGraph(G, vtk = False,  pic = None):
             pvActor, props = p.add_actor(actor)
             pvActorPC, propsPC = p.add_actor(point_cloud.vtkActor)
             p.show()
+
 
 
 
@@ -408,6 +467,7 @@ def renderGraph(nodes, edges, vtk = False, gif = None):
         renderWindowInteractor.Start()
     else:
         pyvista.global_theme.edge_color = 'blue'
+        pyvista.set_jupyter_backend('static')  
         pyvista.set_plot_theme('paraview')
         p = pyvista.Plotter()
         p.add_actor(actor)
