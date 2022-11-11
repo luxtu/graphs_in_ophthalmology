@@ -1,7 +1,7 @@
 import torch
 from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, SAGEConv, GraphConv
+from torch_geometric.nn import GCNConv, SAGEConv, GraphConv, GATConv
 from torch_geometric.nn import global_mean_pool
 import wandb
 import pandas as pd
@@ -33,6 +33,7 @@ class nodeClassifier():
     def train(self, nxG, train_mask):
         self.model.train()
         self.optimizer.zero_grad()  # Clear gradients.
+        #if isinstance(self.model, GATConv):
         out = self.model(nxG.x[:,self.features].float(), nxG.edge_index)  # Perform a single forward pass.
         loss = self.lossFunc(out[train_mask].float(), nxG.y[train_mask])  # Compute the loss solely based on the training nodes.
         loss.backward()  # Derive gradients.
@@ -47,11 +48,14 @@ class nodeClassifier():
         test_acc = int(test_correct.sum()) / len(test_mask)  # Derive ratio of correct predictions.
         return test_acc
 
-    def predictions(self, nxG, test_mask):
+    def predictions(self, nxG, max_prob = True):
         self.model.eval()
         out = self.model(nxG.x[:,self.features].float(), nxG.edge_index)
-        pred = out.argmax(dim=1)  # Use the class with highest probability.
+        if max_prob:
+            pred = out.argmax(dim=1)  # Use the class with highest probability.
         #test_correct = pred[test_mask] == nxG.y[test_mask]  # Check against ground-truth labels.
+        else:
+            pred = out
         return pred 
 
 
@@ -114,6 +118,34 @@ class GCN_VS(torch.nn.Module):
         return x # torch.log_softmax(x, dim=-1) # remove softmax with binary cross entropy
 
 
+class GAT_VS(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers, dropout):
+        super().__init__()
+
+        self.convs = torch.nn.ModuleList()
+        self.convs.append(
+            GATConv(in_channels, hidden_channels, normalize=False))
+        for _ in range(num_layers - 2):
+            self.convs.append(
+                GATConv(hidden_channels, hidden_channels, normalize=False))
+        self.convs.append(
+            GATConv(hidden_channels, out_channels, normalize=False))
+
+        self.dropout = dropout
+
+    def reset_parameters(self):
+        for conv in self.convs:
+            conv.reset_parameters()
+
+    def forward(self, x, adj_t):
+        for conv in self.convs[:-1]:
+            x = conv(x, adj_t)
+            x = F.relu(x)
+        x = F.dropout(x, p=self.dropout, training=self.training) # maybe remove the dropout from the convolutional layers, or reduce drastically
+        x = self.convs[-1](x, adj_t)
+        return x # torch.log_softmax(x, dim=-1) # remove softmax with binary cross entropy
+
+
 
 
 class nodeClassifierSweep():
@@ -147,7 +179,6 @@ class nodeClassifierSweep():
 
 
         def train():
-
             modelS.train()
             optimizerS.zero_grad()  # Clear gradients. #
             out = modelS(self.graph.x.float(), self.graph.edge_index)  # Perform a single forward pass.
@@ -168,13 +199,17 @@ class nodeClassifierSweep():
 
         for self.epoch in tqdm(range(1, self.epochs+1)):
             loss = train()
+            acc = test()
+
             wandb.log({"gcn/loss": loss})
+            wandb.log({"gcn/valacc": acc})
 
 
         modelS.eval()
         out = modelS(self.graph.x.float(), self.graph.edge_index)
         
         test_acc = test()
+
         wandb.summary["gcn/accuracy"] = test_acc
         wandb.log({"gcn/accuracy": test_acc})
         embedding_to_wandb(out, color=self.graph.y, key="gcn/embedding/trained")

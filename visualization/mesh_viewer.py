@@ -216,8 +216,8 @@ def createDualLUT(class_num, label_dict):
     magenta = colors.GetColor3d("Magenta")
     cyan = colors.GetColor3d("Cyan")
 
-    color_list = [magenta, yellow, cyan]
-    label_addon_list = [hash("n") *2 , hash("l") *2 , hash("n") + hash("l")]
+    color_list = [magenta, yellow, cyan, red, green]
+    label_addon_list = ["n" , "l" , "nl", "f", "r"]
 
     lut.SetNumberOfTableValues(class_num)
 
@@ -230,7 +230,6 @@ def createDualLUT(class_num, label_dict):
     lut.Build()
 
     return lut
-
 
 
 
@@ -255,10 +254,15 @@ def renderNXGraph(G, dual = False, vtk = False,  pic = None, backend = False):
         lut = createPrimalLUT(class_num, labelDict)
 
     else:
-        #class_dict = dict(zip(np.array([hash("n") *2 , hash("l") *2 , hash("n") + hash("l")]), np.arange(3)))
-        node_classes = np.unique([hash(elem[0][-1]) + hash(elem[1][-1]) for elem in nodes])
-        class_num = len(node_classes)
-        labelDict = dict(zip(node_classes, np.arange(class_num)))
+        
+        #node_classes = np.unique([hash(elem[0][-1]) + hash(elem[1][-1]) for elem in nodes])
+        #print(node_classes)
+        #class_num = len(node_classes)
+        #labelDict = dict(zip(node_classes, np.arange(class_num)))
+
+        labelDict = dict(zip(np.array(["n" ,"l" ,"nl"]), np.arange(3)))
+
+        class_num = 3
 
         lut = createDualLUT(class_num, labelDict)
 
@@ -280,7 +284,14 @@ def renderNXGraph(G, dual = False, vtk = False,  pic = None, backend = False):
     #create node labels for visualization and vertices 
     for i, node in enumerate(nodes):
         # label creation
-        key = node[-1] if not dual else hash(node[0][-1]) + hash(node[1][-1])
+        if not dual: 
+            key = node[-1] 
+        else: 
+            if node[0][-1] == node[1][-1]:
+                key = node[0][-1]
+            else: 
+                key = "nl"
+
 
         val = labelDict[key]
         labels.InsertNextValue(val)
@@ -301,9 +312,6 @@ def renderNXGraph(G, dual = False, vtk = False,  pic = None, backend = False):
     line_color = vtkIntArray()
     line_color.SetName("Line_col")
 
-    other_scalars = vtkIntArray()
-    other_scalars.SetName("Other")
-
     for edge in edges: 
         node1 = edge[0]
         node2 = edge[1]
@@ -312,8 +320,15 @@ def renderNXGraph(G, dual = False, vtk = False,  pic = None, backend = False):
             n1 = labelDict[node1[-1]]
             n2 = labelDict[node2[-1]]
         else: 
-            n1 = labelDict[hash(node1[0][-1]) + hash(node1[1][-1])]
-            n2 = labelDict[hash(node2[0][-1]) + hash(node2[1][-1])]
+            if node1[0][-1] == node1[1][-1]:
+                n1 = labelDict[node1[1][-1]]
+            else: 
+                n1 = labelDict["nl"]
+
+            if node2[0][-1] == node2[1][-1]:
+                n2 = labelDict[node2[1][-1]]
+            else: 
+                n2 = labelDict["nl"]
 
         line = vtkLine()
         line.GetPointIds().SetId(0, vertex_dict[node1])
@@ -324,7 +339,6 @@ def renderNXGraph(G, dual = False, vtk = False,  pic = None, backend = False):
         else: 
             color_val = max(n1,n2)
         line_color.InsertNextValue(color_val)
-        other_scalars.InsertNextValue(1)
 
 
     # create polydata representing the lines
