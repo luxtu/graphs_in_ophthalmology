@@ -3,13 +3,8 @@ import numpy as np
 from scipy.sparse.csgraph import connected_components
 import preprocessing as pp
 from visualization import graph_to_mesh, visualized_training
-from torch_geometric.utils.convert import from_networkx
 from models import nodeClassifier
-from tqdm import tqdm
 import torch
-import pyvista
-import trimesh
-import pyvistaqt as pvqt
 
 
 nodesFileNerve =  "~/Documents/Intestine/nerve-mask/nodes_nerve_bs2.csv"

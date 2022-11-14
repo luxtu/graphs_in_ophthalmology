@@ -263,6 +263,7 @@ def createNodesNx(G, nodes, node_rad):
         mesh = trimesh.primitives.Sphere(center = pos, radius = node_rad)
         meshList.append(mesh)
         pbar.update(1)
+    pbar.close()
     return meshList
 
 
@@ -339,6 +340,7 @@ def createEdgesNx(G, edges, edge_rad):
             mesh = createEdgeNx(G, edge, edge_rad)
             meshList.append(mesh)
         pbar.update(1)
+    pbar.close()
     return meshList
 
 
@@ -376,7 +378,7 @@ def edgeMeshesNx(G, concat = True, edge_rad = 0.0025):
 
 
 def createMeshNX(G, combine = False):
-    """ A function that creates a trimseh object corresponding to a provided networkX graph.
+    """ A function that creates a trimesh object corresponding to a provided networkX graph.
 
     Parameters
     ----------

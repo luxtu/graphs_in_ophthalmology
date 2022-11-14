@@ -49,6 +49,7 @@ def random_node_neighbor(graph, sample_size, start_nodes):
 
 
         node_sets.append(discovered)
+    pbar.close()
 
     return node_sets
 
@@ -92,6 +93,7 @@ def random_walk(graph, sample_size, start_nodes, c = 0.15):
 
             discovered.add(mom_node)
         node_sets.append(discovered)
+    pbar.close()
 
     return node_sets
 
@@ -131,7 +133,7 @@ def random_jump(graph, sample_size, start_nodes, c = 0.15):
                 break
         if not stuck:
             node_sets.append(discovered)
-
+    pbar.close()
     return node_sets
 
         

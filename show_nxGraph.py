@@ -90,7 +90,6 @@ G_contract_einf_comb_relab = gm.nearestNeighborLabeling(G_contract_einf, G_contr
 mesh_viewer.renderNXGraph(G_contract_einf, vtk = 0)
 
 
-#pp.enrichNodeAttributes(G_contract_einf)
 #
 #print("now")
 #nodeMeshes, unique_nodes = graph_to_mesh.nodeMeshesNx(G_contract_einf)
@@ -102,6 +101,8 @@ mesh_viewer.renderNXGraph(G_contract_einf, vtk = 0)
 ##showList_trimesh
 #mesh_viewer.showList_trimesh(nodeMeshes + edgeMeshes)
 ##mesh_viewer.gifList_trimesh(nodeMeshes + edgeMeshes, "test_animate")
+
+
 
 
 

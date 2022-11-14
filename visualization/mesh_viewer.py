@@ -395,21 +395,29 @@ def renderNXGraph(G, dual = False, vtk = False,  pic = None, backend = False):
         pyvista.set_plot_theme('paraview')
         if backend != False:
             pyvista.set_jupyter_backend('static')  
-        
-        p = pyvista.Plotter()
-        pvActor, props = p.add_actor(actor)
-        pvActorPC, propsPC = p.add_actor(point_cloud.vtkActor)
 
         if pic is not None:
             p = pyvista.Plotter(off_screen= True)
             p.window_size = 1000, 1000
             pvActor, props = p.add_actor(actor)
             pvActorPC, propsPC = p.add_actor(point_cloud.vtkActor)
+            p.add_axes(line_width=5, labels_off=False)
             p.screenshot(pic) 
+
+
         else:
             p = pyvista.Plotter()
             pvActor, props = p.add_actor(actor)
             pvActorPC, propsPC = p.add_actor(point_cloud.vtkActor)
+            _ = p.add_axes(line_width=5, labels_off=False)
+
+
+
+            mesh = pyvista.Plane(center=(-0.3, 0.638, 0), direction=(0, 1, 0), i_size=4, j_size=3, i_resolution=1, j_resolution=1)
+            mesh.point_data.clear()
+            p.add_mesh(mesh, opacity = 0.6)
+
+
             p.show()
 
 
@@ -485,6 +493,7 @@ def renderGraph(nodes, edges, vtk = False, gif = None):
         pyvista.set_plot_theme('paraview')
         p = pyvista.Plotter()
         p.add_actor(actor)
+        _ = p.add_axes_at_origin(line_width=5, labels_off=False)
 
 
         if gif is not None:
