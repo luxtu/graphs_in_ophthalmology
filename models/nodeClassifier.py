@@ -1,7 +1,7 @@
 import torch
 from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, SAGEConv, GraphConv, GATConv
+from torch_geometric.nn import GCNConv, SAGEConv, GraphConv, GATConv, ClusterGCNConv
 from torch_geometric.nn import global_mean_pool
 import wandb
 import pandas as pd
@@ -147,8 +147,40 @@ class GAT_VS(torch.nn.Module):
 
 
 
+class CLUST_GCN_VS(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers, dropout, diag_lambda = 0):
+        super().__init__()
+
+        self.convs = torch.nn.ModuleList()
+        self.convs.append(
+            ClusterGCNConv(in_channels, hidden_channels, diag_lambda= diag_lambda))
+        for _ in range(num_layers - 2):
+            self.convs.append(
+                GATConv(hidden_channels, hidden_channels, diag_lambda= diag_lambda))
+        self.convs.append(
+            GATConv(hidden_channels, out_channels, diag_lambda= diag_lambda))
+
+        self.dropout = dropout
+
+    def reset_parameters(self):
+        for conv in self.convs:
+            conv.reset_parameters()
+
+    def forward(self, x, adj_t):
+        for conv in self.convs[:-1]:
+            x = conv(x, adj_t)
+            x = F.relu(x)
+        x = F.dropout(x, p=self.dropout, training=self.training) # maybe remove the dropout from the convolutional layers, or reduce drastically
+        x = self.convs[-1](x, adj_t)
+        return x # torch.log_softmax(x, dim=-1) # remove softmax with binary cross entropy
+
+
+
+
+
 
 class nodeClassifierSweep():
+    
     def __init__(self, features, classes, optimizer, lossFunc, graph, train_mask, test_mask, epochs = 100):
         self.features = features
         self.classes = classes 
@@ -160,21 +192,33 @@ class nodeClassifierSweep():
         self.epochs = epochs
 
 
-    def agent_variable_size_model(self):
-        wandb.init()
-        if wandb.config.models == "SAGE":
+    def handle_model(self, model_str):
+        if model_str == "SAGE":
             modelS = SAGE_VS(in_channels = len(self.features), hidden_channels= wandb.config.hidden_channels, 
                 out_channels = self.classes, num_layers = wandb.config.num_layers, dropout  = wandb.config.dropout)
 
-        elif wandb.config.models == "GCN":
+        elif model_str == "GCN":
            modelS = GCN_VS(in_channels = len(self.features), hidden_channels= wandb.config.hidden_channels, 
                 out_channels = self.classes, num_layers = wandb.config.num_layers, dropout  = wandb.config.dropout)
 
+        elif model_str == "CLUST_GCN_VS":
+            modelS = GCN_VS(in_channels = len(self.features), hidden_channels= wandb.config.hidden_channels, 
+                out_channels = self.classes, num_layers = wandb.config.num_layers, dropout  = wandb.config.dropout) 
+
+        return modelS
+
+
+    def agent_variable_size_model(self):
+        wandb.init()
+
+        modelS = self.handle_model(wandb.config.models)
+
         wandb.watch(modelS)
+
         with torch.no_grad():
             out = modelS(self.graph.x.float(), self.graph.edge_index)
-            embedding_to_wandb(out, color= self.graph.y, key="gcn/embedding/init")  
-        optimizerS = self.optimizer(modelS.parameters(), lr= wandb.config.lr, weight_decay= wandb.config.weight_decay) #wandb.config.lr # wandb.config.weight_decay
+            embedding_to_wandb(out, color= self.graph.y, key = "gcn/embedding/init")  
+        optimizerS = self.optimizer(modelS.parameters(), lr = wandb.config.lr, weight_decay= wandb.config.weight_decay) #wandb.config.lr # wandb.config.weight_decay
         criterionS = self.lossFunc()
 
 

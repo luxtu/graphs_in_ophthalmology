@@ -418,6 +418,9 @@ def renderNXGraph(G, dual = False, vtk = False,  pic = None, backend = False, ge
 
 
 
+
+
+
 def renderGraph(nodes, edges, vtk = False, gif = None):
     g = vtkMutableUndirectedGraph()
     colors = vtkNamedColors()
