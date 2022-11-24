@@ -7,7 +7,7 @@ import trimesh
 
 
 
-# load teh raw data for the masks
+# load the raw data for the masks
 nerve_mask =  "../Intestine/nerve-mask/nerve_mask_stack_255_fh.tif"
 lymph_mask =  "../Intestine/lymph-mask/lymph_mask_stack_255_fh.tif"
 
@@ -16,7 +16,7 @@ nerve_mask_np = np.array(tiff.imread(nerve_mask)).T
 lymph_mask_np = np.array(tiff.imread(lymph_mask)).T
 
 # load the pickled graph
-G_load = nx.read_gpickle("graph_gt_pickle")
+G_load = nx.read_gpickle("saved_data/graph_gt_pickle")
 
 # create/ load the renderings for the mask 
 #spacing = (1.625*0.00217391, 1.625*0.00217391, 6*0.00217391)  
@@ -24,8 +24,8 @@ G_load = nx.read_gpickle("graph_gt_pickle")
 #nerve_mesh = volume_to_mesh.meshFromVolume(nerve_mask_np, spacing, 10, 10, save_stl= True, stl_name = "Nerve_mask_mesh")
 #lymph_mesh = volume_to_mesh.meshFromVolume(lymph_mask_np, spacing, 10, 10, save_stl= True, stl_name = "Lymph_mask_mesh")
 
-nerve_mesh = trimesh.load_mesh('Nerve_mask_mesh.stl')
-lymph_mesh = trimesh.load_mesh('Lymph_mask_mesh.stl')
+nerve_mesh = trimesh.load_mesh('saved_data/Nerve_mask_mesh.stl')
+lymph_mesh = trimesh.load_mesh('saved_data/Lymph_mask_mesh.stl')
 
 
 # actors for the graph

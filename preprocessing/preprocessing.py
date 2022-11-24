@@ -315,8 +315,8 @@ def getLablesForDual(D, node_lab = None):
 
 
 
-def makeDual(G):
-    """ Returns the dual graph of a given networkX graph.
+def makeDual(G, include_orientation = True):
+    """ Returns the dual graph of a given networkX graph. Encodes the position of the new nodes as the centers of the old nodes.
 
     Paramters
     ---------
@@ -331,11 +331,28 @@ def makeDual(G):
     dual_node_features ={}
     dual_node_centers = {}
     for edge in G.edges:
-        dual_node_features[edge] = G.edges[edge]["x"]
+
+        
         posA = np.array(G.nodes[edge[0]]["pos"])
         posB = np.array(G.nodes[edge[1]]["pos"])
         edge_cent = (posA + posB) /2
         dual_node_centers[edge] = edge_cent
+
+        dual_node_features[edge] = G.edges[edge]["x"]
+
+        if include_orientation:
+            vec = posA-posB
+            direction = (vec)/ np.linalg.norm(vec)
+
+            if direction[0] < 0 or (direction[0] == 0 and direction[1] <0) or (direction[2] == -1):
+                direction = direction*-1
+                
+            feat = np.concatenate((G.edges[edge]["x"], direction))
+            dual_node_features[edge] = feat
+
+        else:
+            dual_node_features[edge] = G.edges[edge]["x"]
+
     
     nx.set_node_attributes(D, dual_node_features, name = "x")
     nx.set_node_attributes(D, dual_node_centers, name = "pos")

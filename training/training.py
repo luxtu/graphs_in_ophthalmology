@@ -59,7 +59,6 @@ class Splitter():
         if self.seed is not None:
             np.random.seed(seed)
 
-        print
         node_num = self.nxGraph.y.shape[0]
         
         train_mask = np.random.choice(np.arange(0, node_num), size= int(node_num*frac), replace = False)
@@ -107,11 +106,12 @@ class Trainer():
 
             loss = self.model.train(self.nxGraph, self.train_mask)
             self.loss_l.append(loss.detach().numpy().copy())
+            test_acc = self.model.test(self.nxGraph, self.test_mask)
             if verbose:
                 print(f'Epoch: {epoch:03d}, Loss: {loss:.4f}')
+                print(f'Epoch: {epoch:03d}, Val. Acc.: {test_acc:.4f}')
             else:
                 pbar.update(1)
-            test_acc = self.model.test(self.nxGraph, self.test_mask)
             self.acc_l.append(test_acc)
 
         pbar.close()

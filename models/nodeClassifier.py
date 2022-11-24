@@ -48,12 +48,14 @@ class nodeClassifier():
         test_acc = int(test_correct.sum()) / len(test_mask)  # Derive ratio of correct predictions.
         return test_acc
 
-    def predictions(self, nxG, max_prob = True):
+    def predictions(self, nxG, mask= None, max_prob = True):
         self.model.eval()
+
         out = self.model(nxG.x[:,self.features].float(), nxG.edge_index)
+
         if max_prob:
             pred = out.argmax(dim=1)  # Use the class with highest probability.
-        #test_correct = pred[test_mask] == nxG.y[test_mask]  # Check against ground-truth labels.
+
         else:
             pred = out
         return pred 
@@ -201,7 +203,7 @@ class nodeClassifierSweep():
            modelS = GCN_VS(in_channels = len(self.features), hidden_channels= wandb.config.hidden_channels, 
                 out_channels = self.classes, num_layers = wandb.config.num_layers, dropout  = wandb.config.dropout)
 
-        elif model_str == "CLUST_GCN_VS":
+        elif model_str == "CLUST":
             modelS = GCN_VS(in_channels = len(self.features), hidden_channels= wandb.config.hidden_channels, 
                 out_channels = self.classes, num_layers = wandb.config.num_layers, dropout  = wandb.config.dropout) 
 
@@ -241,13 +243,15 @@ class nodeClassifierSweep():
             return test_acc
 
 
+        opt_valacc = 0
         for self.epoch in tqdm(range(1, self.epochs+1)):
             loss = train()
             acc = test()
 
-            wandb.log({"gcn/loss": loss})
-            wandb.log({"gcn/valacc": acc})
+            if acc > opt_valacc:
+                opt_valacc = acc
 
+            wandb.log({"gcn/loss": loss, "gcn/valacc": acc})
 
         modelS.eval()
         out = modelS(self.graph.x.float(), self.graph.edge_index)
@@ -255,6 +259,6 @@ class nodeClassifierSweep():
         test_acc = test()
 
         wandb.summary["gcn/accuracy"] = test_acc
-        wandb.log({"gcn/accuracy": test_acc})
+        wandb.log({"gcn/max_accuracy": opt_valacc, "gcn/accuracy": test_acc})
         embedding_to_wandb(out, color=self.graph.y, key="gcn/embedding/trained")
         wandb.finish()    

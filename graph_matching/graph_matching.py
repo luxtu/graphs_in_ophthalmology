@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.spatial import KDTree
 import networkx as nx
+from tqdm import tqdm
+from graph_matching import util
 
 
 
@@ -67,7 +69,7 @@ def nearestNeighborLabeling(G_labeled, G_other, num_nn =1, copy = True):
 
 
 
-def assignNodeLabelsByMask(maskList, G, voxel_size = (1,1,1), scaling_vector = (1,1,1), assign_type = "max", kernel_size = 5):
+def assignNodeLabelsByMask(maskList, G, voxel_size = (1,1,1), scaling_vector = (1,1,1), assign_type = "max", kernel_size = 5, mask_center = None):
     ''''Returns labels for the nodes in a graph based on the presence of labels ins a provided mask list.
 
     Parameters
@@ -95,7 +97,8 @@ def assignNodeLabelsByMask(maskList, G, voxel_size = (1,1,1), scaling_vector = (
 
 
     sizes = np.array(voxel_size)* np.array(scaling_vector)
-    mask_center = np.array(shape_array[0]/2)
+    if mask_center is None:
+        mask_center = np.array(shape_array[0]/2)
 
 
     min_size = min(sizes)
@@ -111,7 +114,15 @@ def assignNodeLabelsByMask(maskList, G, voxel_size = (1,1,1), scaling_vector = (
 
 
     label_dict = {}
+
+    if assign_type == "max":
+        assig_func = util.max_assign
+    elif assign_type == "mix":
+        assig_func = util.mix_assign
+
+    pbar = tqdm(total=G.order())
     for node in G.nodes():
+        pbar.update(1)
         node_pos = G.nodes[node]["pos"]
 
 
@@ -119,33 +130,25 @@ def assignNodeLabelsByMask(maskList, G, voxel_size = (1,1,1), scaling_vector = (
         node_pos_idx = offset + mask_center
         node_pos_idx = node_pos_idx.astype("int")
 
-        max_val = 0
-        max_idx = -1
+        idcs = []
 
-        lowerX, upperX = node_pos_idx[0]-adj_kernel_size[0]+1, node_pos_idx[0]+adj_kernel_size[0]
-        lowerY, upperY = node_pos_idx[1]-adj_kernel_size[1]+1, node_pos_idx[1]+adj_kernel_size[1]
-        lowerZ, upperZ = node_pos_idx[2]-adj_kernel_size[2]+1, node_pos_idx[2]+adj_kernel_size[2]
+        for i in range(3):
+            lower = node_pos_idx[i]-adj_kernel_size[i]+1
+            lower = lower if lower >=0 else 0 
+            upper = node_pos_idx[i]+adj_kernel_size[i]
+            idcs.append(lower)
+            idcs.append(upper)
 
-        lowerX = lowerX if lowerX >=0 else 0 
-        lowerY = lowerY if lowerY >=0 else 0 
-        lowerZ = lowerZ if lowerZ >=0 else 0
-
-        for i, mask in enumerate(maskList):
-            val = np.sum(mask[lowerX: upperX, lowerY: upperY, lowerZ:upperZ])
-            if val > max_val:
-                max_val = val 
-                max_idx = i 
-            elif val <0:
-                print(val)
-
+        max_idx = assig_func(idcs, maskList)
         label_dict[node] = max_idx
 
+    pbar.close()
     return label_dict
 
 
 
 def labelPrimalFromDual(G, L, L_lab_attr, conv_dict, G_lab_attr = None):
-    ''''Labels a Graph G based on the labeling that already exists for L. 
+    ''''Labels a Graph G based on the labeling that already exists for L. If the class of the dual node is a pure class e.g. "n" then both neighboring node are labeled according to this class. 
 
     Parameters
     ----------
