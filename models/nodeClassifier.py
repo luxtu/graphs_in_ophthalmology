@@ -40,6 +40,8 @@ class nodeClassifier():
         self.optimizer.step()  # Update parameters based on gradients.
         return loss
 
+
+    @torch.no_grad()
     def test(self, nxG, test_mask):
         self.model.eval()
         out = self.model(nxG.x[:,self.features].float(), nxG.edge_index)
@@ -48,6 +50,8 @@ class nodeClassifier():
         test_acc = int(test_correct.sum()) / len(test_mask)  # Derive ratio of correct predictions.
         return test_acc
 
+
+    @torch.no_grad()
     def predictions(self, nxG, mask= None, max_prob = True):
         self.model.eval()
 
@@ -82,13 +86,13 @@ class SAGE_VS(torch.nn.Module):
         for conv in self.convs:
             conv.reset_parameters()
 
-    def forward(self, x, adj_t):
+    def forward(self, x, edge_index):
         for conv in self.convs[:-1]:
-            x = conv(x, adj_t)
+            x = conv(x, edge_index)
             x = F.relu(x)
         
         x = F.dropout(x, p=self.dropout, training=self.training)
-        x = self.convs[-1](x, adj_t)
+        x = self.convs[-1](x, edge_index)
         return x # torch.log_softmax(x, dim=-1) # remove softmax with binary cross entropy
 
 
@@ -111,12 +115,12 @@ class GCN_VS(torch.nn.Module):
         for conv in self.convs:
             conv.reset_parameters()
 
-    def forward(self, x, adj_t):
+    def forward(self, x, edge_index):
         for conv in self.convs[:-1]:
-            x = conv(x, adj_t)
+            x = conv(x, edge_index)
             x = F.relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training) # maybe remove the dropout from the convolutional layers, or reduce drastically
-        x = self.convs[-1](x, adj_t)
+        x = self.convs[-1](x, edge_index)
         return x # torch.log_softmax(x, dim=-1) # remove softmax with binary cross entropy
 
 
@@ -139,12 +143,12 @@ class GAT_VS(torch.nn.Module):
         for conv in self.convs:
             conv.reset_parameters()
 
-    def forward(self, x, adj_t):
+    def forward(self, x, edge_index):
         for conv in self.convs[:-1]:
-            x = conv(x, adj_t)
+            x = conv(x, edge_index)
             x = F.relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training) # maybe remove the dropout from the convolutional layers, or reduce drastically
-        x = self.convs[-1](x, adj_t)
+        x = self.convs[-1](x, edge_index)
         return x # torch.log_softmax(x, dim=-1) # remove softmax with binary cross entropy
 
 
@@ -168,12 +172,12 @@ class CLUST_GCN_VS(torch.nn.Module):
         for conv in self.convs:
             conv.reset_parameters()
 
-    def forward(self, x, adj_t):
+    def forward(self, x, edge_index):
         for conv in self.convs[:-1]:
-            x = conv(x, adj_t)
+            x = conv(x, edge_index)
             x = F.relu(x)
         x = F.dropout(x, p=self.dropout, training=self.training) # maybe remove the dropout from the convolutional layers, or reduce drastically
-        x = self.convs[-1](x, adj_t)
+        x = self.convs[-1](x, edge_index)
         return x # torch.log_softmax(x, dim=-1) # remove softmax with binary cross entropy
 
 
@@ -234,6 +238,7 @@ class nodeClassifierSweep():
  
             return loss
 
+        @torch.no_grad()
         def test():
             modelS.eval()
             out = modelS(self.graph.x.float(), self.graph.edge_index)

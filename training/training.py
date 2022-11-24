@@ -114,7 +114,8 @@ class Trainer():
                 pbar.update(1)
             self.acc_l.append(test_acc)
 
-        pbar.close()
+        if not verbose:
+            pbar.close()
 
         return self.loss_l[-epochs:], self.acc_l[-epochs:]
 
