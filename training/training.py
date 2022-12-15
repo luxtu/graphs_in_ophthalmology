@@ -4,7 +4,6 @@ from tqdm import tqdm
 
 
 
-
 def splitByValue(data, frac):
     num = data.shape[0]
     split = int(frac*num)
@@ -21,14 +20,66 @@ def splitByValue(data, frac):
 
 
 
+def splitByValueTVT(data, frac):
+    num = data.shape[0]
+
+    splits = [round(f * num) for f in np.cumsum(frac)]
+    splits = [0] + splits
+
+
+    idx_sort = np.argsort(data)
+    data_sort = np.sort(data)
+
+    masks = []
+    split_val = []
+
+    for i in range(len(splits)-1):
+        masks.append(idx_sort[splits[i]:splits[i+1]])
+
+    for i in range(len(splits)-2):
+        split_val.append(data_sort[splits[i+1]])
+
+    return masks, split_val
+
+
+
+
 class Splitter():
     def __init__(self, nxGraph, seed = None):
         self.nxGraph = nxGraph
         self.train_mask = None
+        self.val_mask = None
         self.test_mask = None
         self.split_value = None
         self.split_plane_normal = None
         self.seed = seed
+
+    def split_geometric_tvt(self, split_plane_normal, frac = (0.7,0.15, 0.15)):
+        if np.sum(frac) != 1.0:
+            raise ValueError("Fractions mut add up to 1!")
+
+        positions = self.nxGraph["pos"].detach().numpy()
+
+        res = positions* np.array(split_plane_normal)
+        res = np.sum(res, axis = 1)
+        
+        masks, split_value = splitByValueTVT(res, frac)
+
+        train_mask, val_mask, test_mask = masks[0], masks[1], masks[2]
+
+        # convert to torch tensor objects
+        train_mask= torch.tensor(train_mask)
+        val_mask= torch.tensor(val_mask)
+        test_mask= torch.tensor(test_mask)
+
+        # update spliiter props
+        self.train_mask = train_mask
+        self.val_maks = val_mask
+        self.test_mask = test_mask
+        self.split_value = split_value
+        self.split_plane_normal = split_plane_normal
+
+        return train_mask,val_mask, test_mask, split_value
     
     
     def split_geometric(self, split_plane_normal, frac = 0.8):

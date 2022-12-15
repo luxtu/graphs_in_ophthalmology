@@ -7,6 +7,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse import dok_array
 
 
+
 def createGraph(nodesFile, edgesFile, index_addon = None):
     """ Creates an networkX undirected multigraph from provided csv files.
 
