@@ -1,6 +1,7 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
+import json
 from tqdm import tqdm
 from scipy.spatial import KDTree
 from scipy.sparse import csr_matrix
@@ -8,7 +9,7 @@ from scipy.sparse import dok_array
 
 
 
-def createGraph(nodesFile, edgesFile, index_addon = None):
+def create_graph(nodesFile, edgesFile, index_addon = None):
     """ Creates an networkX undirected multigraph from provided csv files.
 
     Paramters
@@ -51,7 +52,7 @@ def createGraph(nodesFile, edgesFile, index_addon = None):
 
 
 
-def convertToEinfach(G_multi, self_loops = False, isolates = False):
+def to_einfach(G_multi, self_loops = False, isolates = False):
     """ Creates an networkX simple graph from a networkX multigraph. Also removes all isolated nodes and self loops
 
     Paramters
@@ -73,7 +74,7 @@ def convertToEinfach(G_multi, self_loops = False, isolates = False):
 
 
 
-def enrichNodeAttributes(G):
+def enrich_node_attrs(G):
     """ Enriches the x. attribute of the nodes of a networkX graph with features extracted from the incident edges.
 
     Paramters
@@ -111,7 +112,7 @@ def enrichNodeAttributes(G):
     #   'avgRadiusStd', 'maxRadiusAvg', 'maxRadiusStd', 'roundnessAvg','roundnessStd', 'node1_degree', 'node2_degree', 'num_voxels', 'hasNodeAtSampleBorder']
 
 
-def graphSummary(G):
+def graph_summary(G):
     """ Prints out a quick summary of the characteristics of a networkX graph.
 
     Paramters
@@ -137,7 +138,7 @@ def graphSummary(G):
     return
 
 
-def scalePosition(df, scaleVector):
+def scale_position(df, scaleVector):
     """ Scales the position encoding attributes in a node dataframe.
 
     Paramters
@@ -290,7 +291,7 @@ def network_sparse_distance_matrix(nodes_1, nodes_2, th):
     return dist_mat_sparse
 
 
-def getLablesForDual(D, node_lab = None):
+def label_dual(D, node_lab = None, overrule = None):
     # combines hashval to class
     if node_lab is None:
          node_lab =  {}
@@ -303,9 +304,17 @@ def getLablesForDual(D, node_lab = None):
 
     class_label_list = []
     for k, node in D.nodes.items():
-        hashval = hash(k[0][-1]) + hash(k[1][-1])
+
+
+        if k[0][-1] == overrule or k[1][-1] == overrule:
+            hashval = hash(overrule) + hash(overrule)
+
+        else:
+            hashval = hash(k[0][-1]) + hash(k[1][-1])
+
         try:
             class_label_list.append(node_lab[hashval])
+
         except KeyError:
             class_label = class_label +1
             node_class_comb[class_label] = (k[0][-1], k[1][-1])
@@ -316,7 +325,7 @@ def getLablesForDual(D, node_lab = None):
 
 
 
-def makeDual(G, include_orientation = True):
+def make_dual(G, include_orientation = True):
     """ Returns the dual graph of a given networkX graph. Encodes the position of the new nodes as the centers of the old nodes.
 
     Paramters
@@ -339,7 +348,6 @@ def makeDual(G, include_orientation = True):
         edge_cent = (posA + posB) /2
         dual_node_centers[edge] = edge_cent
 
-        dual_node_features[edge] = G.edges[edge]["x"]
 
         if include_orientation:
             vec = posA-posB
@@ -359,3 +367,67 @@ def makeDual(G, include_orientation = True):
     nx.set_node_attributes(D, dual_node_centers, name = "pos")
 
     return D
+
+
+def vvg_to_df(vvg_path):
+    # Opening JSON file
+    f = open(vvg_path)
+    data = json.load(f)
+    f.close()
+
+    id_col = []
+    pos_col = []
+    node1_col = []
+    node2_col = []
+
+    for i in data["graph"]["edges"]:
+        positions = []
+        id_col.append(i["id"])
+        node1_col.append(i["node1"])
+        node2_col.append(i["node2"])
+
+        for j in i["skeletonVoxels"]:
+            positions.append(np.array(j["pos"]))
+        pos_col.append(positions)
+
+
+    d = {'id_col': id_col,'pos_col' : pos_col, "node1_col" : node1_col, "node2_col" : node2_col}
+    df = pd.DataFrame(d)
+    df.set_index('id_col')
+    return df
+
+
+
+def find_pixel_pos(voxel_size, position, mask_center):
+
+    offset = np.rint(np.array(position)/ voxel_size)
+    node_pos_idx = offset + mask_center
+    node_pos_idx = node_pos_idx.astype("int")
+
+    return node_pos_idx
+
+
+
+def label_edges_centerline(mask_list, voxel_size, df_centerline, mask_center = None):
+    no_classes = len(mask_list)
+    label_dict = {}
+    label_dict_node_ids = {}
+    sha = np.array(mask_list[0].shape)
+    if mask_center is None:
+         mask_center = sha/2
+
+
+    for idx, row in df_centerline.iterrows():
+        positions = row["pos_col"]
+        mask_counts = np.zeros((no_classes,))
+
+        for i in range(len(positions)):
+            pos = find_pixel_pos(voxel_size, positions[i], mask_center)
+            for i, mask in enumerate(mask_list):
+                val = mask[pos[0], pos[1], pos[2]] > 0
+                mask_counts [i] += val
+        
+        label_dict[idx] = np.argmax(mask_counts)
+        label_dict_node_ids[(row["node1_col"],row["node2_col"])] = np.argmax(mask_counts)
+
+    return label_dict, label_dict_node_ids

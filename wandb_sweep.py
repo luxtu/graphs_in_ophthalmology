@@ -28,9 +28,9 @@ sweep_name = args.s
 G_comb_einf_lab = nx.read_gpickle("saved_data/graph_gt_pickle_upsamp")
 
 # convert to dual and convert to torch and assign labels
-L_comb_einf_lab = pp.makeDual(G_comb_einf_lab, include_orientation= False)
+L_comb_einf_lab = pp.make_dual(G_comb_einf_lab, include_orientation= False)
 LX_comb_einf_lab = from_networkx(L_comb_einf_lab)
-class_label_list, node_lab, node_lab_explain =  pp.getLablesForDual(L_comb_einf_lab)
+class_label_list, node_lab, node_lab_explain =  pp.label_dual(L_comb_einf_lab)
 
 # assign the ground truth class information to the torch data obj
 LX_comb_einf_lab.y = torch.tensor(class_label_list)
@@ -63,7 +63,7 @@ split_wholeG = nx.union(train_subG, test_subG)
 
 # make the graph a torch obj
 split_wholeG_torch = from_networkx(split_wholeG)
-split_wholeG_y, _, _ =  pp.getLablesForDual(split_wholeG, node_lab)
+split_wholeG_y, _, _ =  pp.label_dual(split_wholeG, node_lab)
 
 # normalizing the node features
 xL_data = split_wholeG_torch.x.detach().numpy()

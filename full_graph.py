@@ -17,7 +17,7 @@ nodes_c = pd.read_csv(nodesFileComb, sep = ";", index_col= "id")
 edges_c = pd.read_csv(edgesFileComb, sep = ";", index_col= "id")
 
 # scaling with the factors provided by luciano
-nodes_c = pp.scalePosition(nodes_c, (1.625,1.625,6))
+nodes_c = pp.scale_position(nodes_c, (1.625,1.625,6))
 
 
 nodes_c["pos_x"] = nodes_c["pos_x"]*-1
@@ -33,8 +33,8 @@ print(np.max(nodes_c["pos_z"]))
 print(np.min(nodes_c["pos_z"]))
 
 
-G_comb = pp.createGraph(nodes_c, edges_c)
-G_einf_comb = pp.convertToEinfach(G_comb, self_loops = False, isolates = False)
+G_comb = pp.create_graph(nodes_c, edges_c)
+G_einf_comb = pp.to_einfach(G_comb, self_loops = False, isolates = False)
 
 # load the raw data for the masks
 nerve_mask =  "../Intestine/segmentation_full/large_C01.nii.nii"

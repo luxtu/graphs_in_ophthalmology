@@ -43,7 +43,7 @@ def graphContraction(nodes_1, nodes_2, edges_1, edges_2, connection_dict):
     
     
     # create a new graph based on the old information
-    G_contract = pp.createGraph(merged_nodes, merged_edges)
+    G_contract = pp.create_graph(merged_nodes, merged_edges)
 
     return G_contract
 
@@ -78,5 +78,5 @@ def graphLinking(nodes_1, nodes_2, edges_1, edges_2, sparse_dist_mat):
 
 
     # create a new graph based on the old information
-    G_link = pp.createGraph(merged_nodes_link_f, merged_edges_link_f)
+    G_link = pp.create_graph(merged_nodes_link_f, merged_edges_link_f)
     return G_link

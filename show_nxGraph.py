@@ -17,8 +17,8 @@ edges_l = pd.read_csv(edgesFileLymph, sep = ";", index_col= "id")
 
 
 # scaling with the factors provided by luciano
-nodes_l = pp.scalePosition(nodes_l, (1.625,1.625,6))
-nodes_n = pp.scalePosition(nodes_n, (1.625,1.625,6))
+nodes_l = pp.scale_position(nodes_l, (1.625,1.625,6))
+nodes_n = pp.scale_position(nodes_n, (1.625,1.625,6))
 
 
 # giving nodes from different files unique names
@@ -63,8 +63,8 @@ for idxE, edge in merged_edges.iterrows():
 
 
 # create a new graph with contracted nodes
-G_contract = pp.createGraph(merged_nodes, merged_edges)
-G_contract_einf = pp.convertToEinfach(G_contract, self_loops = False, isolates = False)
+G_contract = pp.create_graph(merged_nodes, merged_edges)
+G_contract_einf = pp.to_einfach(G_contract, self_loops = False, isolates = False)
 
 ###########################################
 
@@ -76,11 +76,11 @@ nodes_c = pd.read_csv(nodesFileComb, sep = ";", index_col= "id")
 edges_c = pd.read_csv(edgesFileComb, sep = ";", index_col= "id")
 
 # scaling with the factors provided by luciano
-nodes_c = pp.scalePosition(nodes_c, (1.625,1.625,6))
+nodes_c = pp.scale_position(nodes_c, (1.625,1.625,6))
 
 
-G_contract_comb = pp.createGraph(nodes_c, edges_c)
-G_contract_einf_comb = pp.convertToEinfach(G_contract_comb, self_loops = False, isolates = False)
+G_contract_comb = pp.create_graph(nodes_c, edges_c)
+G_contract_einf_comb = pp.to_einfach(G_contract_comb, self_loops = False, isolates = False)
 
 G_contract_einf_comb_relab = gm.nearestNeighborLabeling(G_contract_einf, G_contract_einf_comb)
 

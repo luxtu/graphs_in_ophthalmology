@@ -67,6 +67,55 @@ def nearestNeighborLabeling(G_labeled, G_other, num_nn =1, copy = True):
 
 
 
+def assignNodeLabelsByMaskIsotropic(maskList, G, kernel_size = 5, voxel_size = (1,1,1), assign_type = "max", mask_center = None):
+    shape_array = np.array([mask.shape for mask in maskList])
+    eq_shape = np.all(shape_array == shape_array[0])
+
+    # check that the masks have the correct size
+    if not eq_shape:
+        raise ValueError("Not all the masks have the same shape")
+    if not kernel_size%2:
+        raise ValueError("Kernel must have uneven size.")
+
+    if mask_center is None:
+        mask_center = np.array(shape_array[0]/2)
+
+    label_dict = {}
+
+    if assign_type == "max":
+        assig_func = util.max_assign
+    elif assign_type == "mix":
+        assig_func = util.mix_assign
+
+    ks_floor = int(np.floor(kernel_size/2))
+    
+
+    pbar = tqdm(total=G.order())
+    for node in G.nodes():
+        pbar.update(1)
+        node_pos = G.nodes[node]["pos"]
+
+
+        offset = np.rint(np.array(node_pos)/ voxel_size)
+        node_pos_idx = offset + mask_center
+        node_pos_idx = node_pos_idx.astype("int")
+
+        idcs = []
+
+        for i in range(3):
+            lower = node_pos_idx[i]-ks_floor+1
+            lower = lower if lower >=0 else 0 
+            upper = node_pos_idx[i]+ks_floor
+            idcs.append(lower)
+            idcs.append(upper)
+
+        max_idx = assig_func(idcs, maskList)
+        label_dict[node] = max_idx
+
+    pbar.close()
+    return label_dict
+
+
 
 
 def assignNodeLabelsByMask(maskList, G, voxel_size = (1,1,1), scaling_vector = (1,1,1), assign_type = "max", kernel_size = 5, mask_center = None):
@@ -92,9 +141,9 @@ def assignNodeLabelsByMask(maskList, G, voxel_size = (1,1,1), scaling_vector = (
     shape_array = np.array([mask.shape for mask in maskList])
     eq_shape = np.all(shape_array == shape_array[0])
 
+    # check that the masks have the correct size
     if not eq_shape:
         raise ValueError("Not all the masks have the same shape")
-
 
     sizes = np.array(voxel_size)* np.array(scaling_vector)
     if mask_center is None:

@@ -20,8 +20,8 @@ edges_l = pd.read_csv(edgesFileLymph, sep = ";", index_col= "id")
 
 
 # scaling with the factors provided by luciano
-nodes_l = pp.scalePosition(nodes_l, (1.65,1.65,6))
-nodes_n = pp.scalePosition(nodes_n, (1.65,1.65,6))
+nodes_l = pp.scale_position(nodes_l, (1.65,1.65,6))
+nodes_n = pp.scale_position(nodes_n, (1.65,1.65,6))
 
 # giving nodes from different files unique names
 edges_n, nodes_n = pp.relable_edges_nodes(edges_n, nodes_n, "n")
@@ -65,9 +65,9 @@ for idxE, edge in merged_edges.iterrows():
 
 
 # create a new graph based on the information
-G_contract = pp.createGraph(merged_nodes, merged_edges)
-G_contract_einf = pp.convertToEinfach(G_contract, self_loops = False, isolates = False)
-pp.enrichNodeAttributes(G_contract_einf)
+G_contract = pp.create_graph(merged_nodes, merged_edges)
+G_contract_einf = pp.to_einfach(G_contract, self_loops = False, isolates = False)
+pp.enrich_node_attrs(G_contract_einf)
 
 
 first_node = np.array(G_contract_einf.nodes)[0]

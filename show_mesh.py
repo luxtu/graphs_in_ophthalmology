@@ -38,13 +38,13 @@ mask_100_edges = "../skull_compare/sham2results/sham2downsamp/sham2_100_edges_do
 mask_100_nodes_pd = pd.read_csv(mask_100_nodes, sep = ";", index_col= "id")
 mask_100_edges_pd = pd.read_csv(mask_100_edges, sep = ";", index_col= "id")
 
-#mask_100_nodes_pd_scaled = pp.scalePosition(mask_100_nodes_pd, (1.625,1.625,6))
-#mask_100_nodes_pd_scaled = pp.scalePosition(mask_100_nodes_pd, (1,1,1))
-G_mcao2_100_scaled = pp.createGraph(mask_100_nodes_pd, mask_100_edges_pd, "n")
-#mask_100_nodes_pd_scaled = pp.scalePosition(mask_100_nodes_pd, (1.625,1625,6))
+#mask_100_nodes_pd_scaled = pp.scale_position(mask_100_nodes_pd, (1.625,1.625,6))
+#mask_100_nodes_pd_scaled = pp.scale_position(mask_100_nodes_pd, (1,1,1))
+G_mcao2_100_scaled = pp.create_graph(mask_100_nodes_pd, mask_100_edges_pd, "n")
+#mask_100_nodes_pd_scaled = pp.scale_position(mask_100_nodes_pd, (1.625,1625,6))
 
 
-G_mcao2_100 = pp.createGraph(mask_100_nodes, mask_100_edges, "n")
+G_mcao2_100 = pp.create_graph(mask_100_nodes, mask_100_edges, "n")
 
 #mask_200_nodes = "../skull_compare/sham2results/sham2_200_nodes.csv"
 #mask_200_edges = "../skull_compare/sham2results/sham2_200_edges.csv"
@@ -56,12 +56,12 @@ mask_200_edges = "../skull_compare/sham2results/sham2downsamp/sham2_200_edges_do
 mask_200_nodes_pd = pd.read_csv(mask_200_nodes, sep = ";", index_col= "id")
 mask_200_edges_pd = pd.read_csv(mask_200_edges, sep = ";", index_col= "id")
 
-#mask_200_nodes_pd_scaled = pp.scalePosition(mask_200_nodes_pd, (1.625,1.625,6))
-#mask_200_nodes_pd_scaled = pp.scalePosition(mask_200_nodes_pd, (1,1,1))
-G_mcao2_200_scaled = pp.createGraph(mask_200_nodes_pd, mask_200_edges_pd, "l")
+#mask_200_nodes_pd_scaled = pp.scale_position(mask_200_nodes_pd, (1.625,1.625,6))
+#mask_200_nodes_pd_scaled = pp.scale_position(mask_200_nodes_pd, (1,1,1))
+G_mcao2_200_scaled = pp.create_graph(mask_200_nodes_pd, mask_200_edges_pd, "l")
 
 
-G_mcao2_200 = pp.createGraph(mask_200_nodes, mask_200_edges, "l")
+G_mcao2_200 = pp.create_graph(mask_200_nodes, mask_200_edges, "l")
 
 
 #cont_edges = "../skull_compare/CD1-E-no1_iso3um_stitched_segmentation_bulge_size_3.0_edges.csv"
@@ -71,7 +71,7 @@ G_mcao2_200 = pp.createGraph(mask_200_nodes, mask_200_edges, "l")
 #cont_edges_pd = pd.read_csv(cont_edges, sep = ";", index_col= "id")
 #
 #
-#G_cont = pp.createGraph(cont_nodes_pd.sample(1000, axis = 0), cont_edges_pd.sample(0, axis = 0), "n")
+#G_cont = pp.create_graph(cont_nodes_pd.sample(1000, axis = 0), cont_edges_pd.sample(0, axis = 0), "n")
 
 
 #nodes_all =np.array(list(G_cont.nodes()))
@@ -85,12 +85,12 @@ G_mcao2_200 = pp.createGraph(mask_200_nodes, mask_200_edges, "l")
 #mask_100_nodes = "../skull_compare/left_right/naive2_100_nodes.csv"
 #mask_100_edges = "../skull_compare/left_right/naive2_100_edges.csv"
 #
-#G_naive2_100 = pp.createGraph(mask_100_nodes, mask_100_edges, "n")
+#G_naive2_100 = pp.create_graph(mask_100_nodes, mask_100_edges, "n")
 #
 #mask_200_nodes = "../skull_compare/left_right/naive2_200_nodes.csv"
 #mask_200_edges = "../skull_compare/left_right/naive2_200_edges.csv"
 #
-#G_naive2_200 = pp.createGraph(mask_200_nodes, mask_200_edges, "l")
+#G_naive2_200 = pp.create_graph(mask_200_nodes, mask_200_edges, "l")
 
 #mcao2_100_mesh = volume_to_mesh.meshFromVolume(a.astype(bool), (1,1,1), 10, 10)
 

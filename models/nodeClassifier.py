@@ -194,6 +194,7 @@ class GCN_VS(torch.nn.Module):
         for i, conv in enumerate(self.convs[:-1]):
             if self.skip:
                 identity = x
+            x = F.dropout(x, p=self.dropout, training = training)
             x = conv(x, edge_index)
             #if self.norm:
             #    x = self.norms[i](x)
@@ -341,14 +342,18 @@ class nodeClassifierSweep():
             return loss
 
         @torch.no_grad()
-        def test():
+        def test(recall = False):
             modelS.eval()
             out = modelS(self.graph.x.float(), self.graph.edge_index, training = False)
             pred = out.argmax(dim=1)  # Use the class with highest probability.
             test_acc = accuracy_score(self.graph.y[self.val_mask], pred[self.val_mask])
             #test_correct = pred[self.val_mask] == self.graph.y[self.val_mask]  # Check against ground-truth labels.
             #test_acc = int(test_correct.sum()) / len(self.val_mask)  # Derive ratio of correct predictions.
-            return test_acc
+            if recall:
+                recalls = recall_score(self.graph.y[self.val_mask], pred[self.val_mask],  average=None)
+                return test_acc, recalls
+            else:
+                return test_acc
 
         @torch.no_grad()
         def geom_test():
@@ -364,20 +369,21 @@ class nodeClassifierSweep():
         opt_valacc = 0
         for self.epoch in tqdm(range(1, self.epochs+1)):
             loss = train()
-            acc = test()
-            testacc, recalls = geom_test()
+            acc,recalls = test(recall = True)
+            #testacc, recalls = geom_test()
 
             if acc > opt_valacc:
                 opt_valacc = acc
 
-            wandb.log({"gcn/loss": loss, "gcn/valacc": acc, "gcn/testacc": testacc})
+            #wandb.log({"gcn/loss": loss, "gcn/valacc": acc}) # , "gcn/testacc": testacc
+            wandb.log({"gcn/loss": loss, "gcn/valacc": acc, "gcn/recall_0": recalls[0], "gcn/recall_1": recalls[1]}) # , "gcn/testacc": testacc
 
         test_acc = test()
         wandb.summary["gcn/accuracy"] = test_acc
 
         if self.test_mask is not None:
             test_graph_acc, recalls = geom_test()
-            wandb.log({"gcn/max_accuracy": opt_valacc, "gcn/test_graph_accuracy": test_graph_acc, "gcn/recall_0": recalls[0], "gcn/recall_1": recalls[1], "gcn/recall_2": recalls[2]})
+            wandb.log({"gcn/max_accuracy": opt_valacc, "gcn/test_graph_accuracy": test_graph_acc, "gcn/recall_0": recalls[0], "gcn/recall_1": recalls[1]}) # , "gcn/recall_2": recalls[2]
 
         else:
             wandb.log({"gcn/max_accuracy": opt_valacc})
