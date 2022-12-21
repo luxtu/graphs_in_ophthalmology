@@ -1,2 +1,2 @@
-# network-eval
-evaluation of physiological networks in graph representation
+# graph classifcation
+classification of graphs 

@@ -5,3 +5,4 @@ __pycache__/
 *.gif
 wandb
 saved_data
+data

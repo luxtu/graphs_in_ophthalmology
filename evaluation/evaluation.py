@@ -6,11 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_confusion_matrix(groundTruth, predicted, label_list):
+def plot_confusion_matrix(groundTruth, predicted, label_list, ax):
     cf_mat = confusion_matrix(groundTruth, predicted)  
-
-    plt.figure()
-    ax = plt.subplot()
     ax.matshow(cf_mat)
     for (i, j), z in np.ndenumerate(cf_mat):
         ax.text(j, i, z, ha='center', va='center')
@@ -22,7 +19,6 @@ def plot_confusion_matrix(groundTruth, predicted, label_list):
     ax.xaxis.set_label_position('top') 
     ax.set_xlabel("Classified")
     ax.set_ylabel("True Label")
-    plt.show()
 
 
 

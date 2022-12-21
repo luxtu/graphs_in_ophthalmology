@@ -9,11 +9,10 @@ import numpy as np
 
 
 class SVM():
-    def __init__(self, G, **kwargs):
+    def __init__(self, X, y, **kwargs):
         self.clf = SVC(**kwargs)
-        self.G = G
-        self.X = G.x.detach().numpy()
-        self.y = G.y.detach().numpy()
+        self.X = X
+        self.y = y
 
     def fit(self, train_mask):
         try:
@@ -34,11 +33,10 @@ class SVM():
 
         
 class RandomForest():
-    def __init__(self, G, **kwargs):
+    def __init__(self, X,y, **kwargs):
         self.clf = RandomForestClassifier(**kwargs)
-        self.G = G
-        self.X = G.x.detach().numpy()
-        self.y = G.y.detach().numpy()
+        self.X = X
+        self.y = y
 
     def fit(self, train_mask):
         try:
@@ -58,11 +56,10 @@ class RandomForest():
 
 
 class MLP():
-    def __init__(self, G, **kwargs):
+    def __init__(self, X,y, **kwargs):
         self.clf = MLPClassifier(**kwargs)
-        self.G = G
-        self.X = G.x.detach().numpy()
-        self.y = G.y.detach().numpy()
+        self.X = X
+        self.y = y
 
     def fit(self, train_mask):
         try:
