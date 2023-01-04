@@ -17,7 +17,7 @@ def plot_confusion_matrix(groundTruth, predicted, label_list, ax):
     ax.set_xticklabels(label_list)
     ax.set_yticklabels(label_list)
     ax.xaxis.set_label_position('top') 
-    ax.set_xlabel("Classified")
+    ax.set_xlabel("Predicted")
     ax.set_ylabel("True Label")
 
 

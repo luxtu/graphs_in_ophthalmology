@@ -34,16 +34,13 @@ class GCN_GC(torch.nn.Module):
     def forward(self, x, edge_index, batch, training = False):
 
         for conv in self.convLayers:
-        # 1. Obtain node embeddings 
             x = F.dropout(x, p=self.dropout, training = training)
             x = conv(x, edge_index)
             x = F.relu(x)
 
-        # 2. Readout layer
-        x = self.aggregation_mode(x, batch)  # [batch_size, hidden_channels]
+        x = self.aggregation_mode(x, batch)
 
-        # 3. Apply a final classifier
-        x = F.dropout(x, p=self.dropout, training = training)
-        x = self.lin(x)
+        x = F.dropout(x, p=self.dropout, training = training) # dropout is here only applied as the last layer
+        x = self.lin(x) # final linear layer/classifier
         
         return x
