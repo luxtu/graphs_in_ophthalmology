@@ -22,6 +22,8 @@ class graphClassifierBatch():
             self.optimizer.step()  # Update parameters based on gradients.
             self.optimizer.zero_grad()  # Clear gradients.
 
+        
+
 
     @torch.no_grad()
     def test(self, loader):
