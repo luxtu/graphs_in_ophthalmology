@@ -6,21 +6,17 @@ import torch
 from torch_geometric.utils.convert import from_networkx
 
 
-
 class SubgraphSampler():
 
-
     def __init__(self, mode):
-        # one of rnn, rw or rj 
-        self.mode = mode 
-
+        # one of rnn, rw or rj
+        self.mode = mode
 
     def set_mode(self, mode):
         if mode not in ["rnn", "rw", "rj"]:
             raise ValueError("Not a valid subsampling mode.")
         else:
             self.mode = mode
-
 
     def random_node_neighbor(self, graph, sample_size, start_nodes):
         """
@@ -37,7 +33,8 @@ class SubgraphSampler():
         """
         node_sets = []
         pbar = tqdm(start_nodes)
-        pbar.set_description("Creating subgraphs using random node neighbor selection.")
+        pbar.set_description(
+            "Creating subgraphs using random node neighbor selection.")
         for start_node in pbar:
 
             # get the size of the connected component of the start node
@@ -46,32 +43,30 @@ class SubgraphSampler():
             # skip if the cc is not as large as the sample size
             if comp_size < sample_size:
                 continue
-            size = 0 
+            size = 0
             neigborhood = []
             discovered = {start_node}
             neigborhood += graph.neighbors(start_node)
             while len(discovered) < sample_size:
-                if len(neigborhood)<1:
-                    #print("entered")
+                if len(neigborhood) < 1:
+                    # print("entered")
                     break
                 new_disc = random.choice(neigborhood)
-                neigborhood = list(filter(lambda a: a != new_disc, neigborhood))
+                neigborhood = list(
+                    filter(lambda a: a != new_disc, neigborhood))
                 discovered.add(new_disc)
 
                 new_neighbors = list(graph.neighbors(new_disc))
-                new_neighbors = list(filter(lambda a: a not in discovered, new_neighbors))
+                new_neighbors = list(
+                    filter(lambda a: a not in discovered, new_neighbors))
                 neigborhood += new_neighbors
-
 
             node_sets.append(discovered)
         pbar.close()
 
         return node_sets
 
-
-
-
-    def random_walk(self, graph, sample_size, start_nodes, c = 0.15):
+    def random_walk(self, graph, sample_size, start_nodes, c=0.15):
         """
         Performs a random walk for each provided start_node. The random walk stops when the discovered nodes are as large as the sample size. 
 
@@ -95,15 +90,15 @@ class SubgraphSampler():
             if comp_size < sample_size:
                 continue
 
-            size = 0 
+            size = 0
             discovered = {start_node}
             mom_node = start_node
             while len(discovered) < sample_size:
 
                 neigborhood = list(graph.neighbors(mom_node))
-                if random.random() >c:
+                if random.random() > c:
                     mom_node = random.choice(neigborhood)
-                else :
+                else:
                     mom_node = start_node
 
                 discovered.add(mom_node)
@@ -112,8 +107,7 @@ class SubgraphSampler():
 
         return node_sets
 
-
-    def random_jump(self, graph, sample_size, start_nodes, c = 0.15):
+    def random_jump(self, graph, sample_size, start_nodes, c=0.15):
         """
         Performs a random walk for each provided start_node. The random walk stops when the discovered nodes are as large as the sample size. 
 
@@ -132,18 +126,18 @@ class SubgraphSampler():
             discovered = {start_node}
             mom_node = start_node
             stuck = False
-            ct = 0 
+            ct = 0
             while len(discovered) < sample_size:
 
-                ct+= 1
+                ct += 1
                 neigborhood = list(graph.neighbors(mom_node))
-                if random.random() >c:
+                if random.random() > c:
                     mom_node = random.choice(neigborhood)
-                else :
+                else:
                     mom_node = random.choice(list(graph))
                 discovered.add(mom_node)
 
-                if ct> sample_size *20:
+                if ct > sample_size * 20:
                     stuck = True
                     break
             if not stuck:
@@ -151,9 +145,7 @@ class SubgraphSampler():
         pbar.close()
         return node_sets
 
-
-
-    def randomGeomSubgraphs(self, G, label, starts = 1000, node_sample_size = 400):
+    def randomGeomSubgraphs(self, G, label, starts=1000, node_sample_size=400):
         """
         Performs a random walk for each provided start_node. The random walk stops when the discovered nodes are as large as the sample size. 
 
@@ -166,15 +158,18 @@ class SubgraphSampler():
         return subGraphsTorch: a list of the randomly sampled subgraphs as torch geom graph
 
         """
-        starts = np.random.choice(np.array(G.nodes),starts)
+        starts = np.random.choice(np.array(G.nodes), starts)
         mode = self.mode.casefold()
 
         if mode == "rnn":
-            R_walks = self.random_node_neighbor(G, sample_size = node_sample_size, start_nodes = starts)
+            R_walks = self.random_node_neighbor(
+                G, sample_size=node_sample_size, start_nodes=starts)
         elif mode == "rw":
-            R_walks = self.random_walk(G, sample_size = node_sample_size, start_nodes = starts, c= 0.0)
+            R_walks = self.random_walk(
+                G, sample_size=node_sample_size, start_nodes=starts, c=0.0)
         elif mode == "rj":
-            R_walks = self.random_jump(G, sample_size = node_sample_size, start_nodes = starts, c= 0.1)
+            R_walks = self.random_jump(
+                G, sample_size=node_sample_size, start_nodes=starts, c=0.1)
         else:
             raise ValueError("No proper mode selected!")
 
@@ -183,7 +178,7 @@ class SubgraphSampler():
         for walk in R_walks:
             subG = nx.induced_subgraph(G, walk)
 
-            if subG.size() <1: # sometimes the start n
+            if subG.size() < 1:  # sometimes the start n
                 continue
 
             subGraphs.append(subG)
