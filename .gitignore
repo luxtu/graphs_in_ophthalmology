@@ -7,3 +7,5 @@ __pycache__/
 wandb
 saved_data
 data
+env/
+.venv/

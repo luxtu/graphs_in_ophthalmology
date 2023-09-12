@@ -38,7 +38,11 @@ class GCN_GC(torch.nn.Module):
             x = conv(x, edge_index)
             x = F.relu(x)
 
-        x = self.aggregation_mode(x, batch)
+        if batch is not None:
+            x = self.aggregation_mode(x, batch)
+
+        else:
+            x = self.aggregation_mode(x, torch.zeros(x.shape[0], dtype= torch.int64))
 
         x = F.dropout(x, p=self.dropout, training = training) # dropout is here only applied as the last layer
         x = self.lin(x) # final linear layer/classifier
