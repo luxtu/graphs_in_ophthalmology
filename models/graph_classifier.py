@@ -76,9 +76,11 @@ class graphClassifierClassic():
         self.model = model
         self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr, weight_decay= weight_decay)
         self.lossFunc = loss_func
-
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.train_loader = train_loader
         self.test_loader = test_loader
+
+        self.model.to(self.device)
 
 
     def train(self):
@@ -95,7 +97,7 @@ class graphClassifierClassic():
             self.optimizer.step()  # Update parameters based on gradients.
             self.optimizer.zero_grad()  # Clear gradients.
             cum_loss += loss.item()
-        print(cum_loss/size_data_set)
+        return cum_loss/size_data_set
 
         
 
@@ -118,8 +120,8 @@ class graphClassifierClassic():
         yList = []
         for data in loader:  # Iterate in batches over the training/test dataset.
             out = self.model(data.x.float(), data.edge_index, data.batch, training = False)  
-            outList.append(out)
-            yList.append(data.y)
+            outList.append(out.cpu())
+            yList.append(data.y.cpu())
         return outList, yList 
 
 

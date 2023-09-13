@@ -164,6 +164,8 @@ class RectangularIterator:
         self.induced_graph_y0 = []
         self.induced_graph_y1 = []
 
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         self.stratified = stratified
         self.shuffle = shuffle
 
@@ -175,6 +177,7 @@ class RectangularIterator:
         if self.shuffle:
             random.shuffle(self.selection)
         self.dataset = CustomGraphDataset(self.selection)
+        
         #print(len(self.stratified_selection))
 
         self.last_id_list = []
@@ -205,6 +208,8 @@ class RectangularIterator:
                 random.shuffle(self.selection)
             self.dataset = CustomGraphDataset(self.selection)
             self.iter_pos = 0
+            del self.selection
+            torch.cuda.empty_cache()
             raise StopIteration
             
         else:
@@ -253,7 +258,7 @@ class RectangularIterator:
 
         for graph in self.graph_list:
 
-            edge_positions = graph.edge_pos.detach().numpy()[:,:-1]
+            edge_positions = graph.edge_pos.cpu().detach().numpy()[:,:-1]
 
             rect_graphs = []
 
@@ -289,7 +294,7 @@ class RectangularIterator:
 
                 subg = Data(x = graph.x[induced_nodes], edge_index = subg_data[0], edge_attr = subg_data[1], y = graph.y, graph_id = graph.graph_id, region = (x_min, x_max, y_min, y_max), edge_pos = graph.edge_pos[induced_nodes])
 
-                rect_graphs.append(subg)
+                rect_graphs.append(subg.to(self.device))
             
             if graph.y[0] ==0:
                 self.induced_graph_y0.extend(rect_graphs)

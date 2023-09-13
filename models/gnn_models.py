@@ -19,6 +19,8 @@ class GCN_GC(torch.nn.Module):
         self.dropout = dropout
         self.aggregation_mode = aggregation_mode
 
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
         # create the conv layers
         self.convLayers = torch.nn.ModuleList()
         for i in range(self.num_layers):
@@ -42,7 +44,7 @@ class GCN_GC(torch.nn.Module):
             x = self.aggregation_mode(x, batch)
 
         else:
-            x = self.aggregation_mode(x, torch.zeros(x.shape[0], dtype= torch.int64))
+            x = self.aggregation_mode(x, torch.zeros(x.shape[0], dtype= torch.int64).to(self.device))
 
         x = F.dropout(x, p=self.dropout, training = training) # dropout is here only applied as the last layer
         x = self.lin(x) # final linear layer/classifier
