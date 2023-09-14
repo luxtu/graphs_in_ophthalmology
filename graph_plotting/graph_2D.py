@@ -41,14 +41,25 @@ class GraphPlotter2D():
         lp_wrapper()
         lp.print_stats()#
 
-    def plot_graph_2D(self):
+    def plot_graph_2D(self, ax = None):
         # create a function that returns a plot of the graph in 2D
         # use the node positions and the edge indices to plot the graph
 
-        fig, ax = plt.subplots()
-        side_l = 5.5
-        fig.set_figwidth(side_l)
-        fig.set_figheight(side_l)
+        if ax is None:
+            fig, ax = plt.subplots()
+            side_l = 5.5
+            fig.set_figwidth(side_l)
+            fig.set_figheight(side_l)
+
+            plt.ylim(0,1200)
+            plt.xlim(0,1200)
+
+        else:
+            ax.set_ylim(0,1200)
+            ax.set_xlim(0,1200)
+            ax.set_yticklabels([])
+            ax.set_xticklabels([])
+
         if not self.line_G:
             ax.scatter(self.node_positions[:,1], self.node_positions[:,0], s = 5) # cmap = "coolwarm"
             for edge in self.edge_indices.T:
@@ -68,9 +79,8 @@ class GraphPlotter2D():
             #    ax.plot(self.edge_positions[edge,0], self.edge_positions[edge,1], c="black",linewidth=1, alpha=0.5)
 
 
-        plt.ylim(0,1200)
-        plt.xlim(0,1200)
-        plt.show()
+
+        #plt.show()
 
 
         #fig, ax = plt.subplots()

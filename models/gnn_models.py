@@ -50,3 +50,15 @@ class GCN_GC(torch.nn.Module):
         x = self.lin(x) # final linear layer/classifier
         
         return x
+
+
+    def vals_without_aggregation(self, x, edge_index, batch, training = False):
+
+        for conv in self.convLayers:
+            x = F.dropout(x, p=self.dropout, training = training)
+            x = conv(x, edge_index)
+            x = F.relu(x)
+
+        x = self.lin(x) # final linear layer/classifier
+        
+        return x
