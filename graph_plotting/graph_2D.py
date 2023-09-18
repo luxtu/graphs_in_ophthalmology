@@ -19,7 +19,11 @@ class GraphPlotter2D():
         self.edge_indices = self.torch_geom_graph.edge_index.cpu().detach().numpy()
         
         self.pred_vals = pred_vals
-        self.edge_positions = self.torch_geom_graph.edge_pos.cpu().detach().numpy()
+
+        try:
+            self.edge_positions = self.torch_geom_graph.edge_pos.cpu().detach().numpy()
+        except AttributeError:
+            pass
 
         self.line_G = line_G
 
@@ -61,7 +65,12 @@ class GraphPlotter2D():
             ax.set_xticklabels([])
 
         if not self.line_G:
-            ax.scatter(self.node_positions[:,1], self.node_positions[:,0], s = 5) # cmap = "coolwarm"
+            if self.pred_vals is not None:
+                sc = ax.scatter(self.node_positions[:,1], self.node_positions[:,0], s = 5,c = self.pred_vals, cmap = "coolwarm")
+                plt.colorbar(sc)
+            else:
+                ax.scatter(self.node_positions[:,1], self.node_positions[:,0], s = 5) # cmap = "coolwarm"
+
             for edge in self.edge_indices.T:
                 ax.plot(self.node_positions[edge,1], self.node_positions[edge,0], c="black",linewidth=1, alpha=0.5)
         else:
