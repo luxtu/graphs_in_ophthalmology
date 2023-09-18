@@ -25,9 +25,9 @@ class GCN_GC(torch.nn.Module):
         self.convLayers = torch.nn.ModuleList()
         for i in range(self.num_layers):
             if i == 0:
-                self.convLayers.append(GCNConv(self.in_channels, self.hidden_channels))
+                self.convLayers.append(SAGEConv(self.in_channels, self.hidden_channels))
             else:
-                self.convLayers.append(GCNConv(self.hidden_channels, self.hidden_channels))
+                self.convLayers.append(SAGEConv(self.hidden_channels, self.hidden_channels))
 
         #set up final layer
         self.lin = Linear(self.hidden_channels, self.out_channels)
@@ -60,5 +60,7 @@ class GCN_GC(torch.nn.Module):
             x = F.relu(x)
 
         x = self.lin(x) # final linear layer/classifier
+
+        x = F.softmax(x, dim = 1)
         
         return x
