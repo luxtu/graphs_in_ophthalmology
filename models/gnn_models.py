@@ -1,9 +1,7 @@
 import torch
 from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv, SAGEConv, GraphConv
-
-
+from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv
 
 
 
@@ -64,3 +62,51 @@ class GCN_GC(torch.nn.Module):
         x = F.softmax(x, dim = 1)
         
         return x
+    
+
+class HeteroGNN(torch.nn.Module):
+    def __init__(self, hidden_channels, out_channels, num_layers, dropout, aggregation_mode):
+        super().__init__()
+
+        self.hidden_channels = hidden_channels
+        self.out_channels = out_channels
+        self.num_layers = num_layers
+        self.dropout = dropout
+        self.aggregation_mode = aggregation_mode
+
+
+        self.convs = torch.nn.ModuleList()
+        for _ in range(num_layers):
+            conv = HeteroConv({
+                ('void', 'to', 'void'): SAGEConv(-1, hidden_channels),
+                ('vessel', 'to', 'vessel'): SAGEConv(-1, hidden_channels),
+            }, aggr='sum')
+            self.convs.append(conv)
+
+        self.lin = Linear(hidden_channels*2, out_channels)
+
+    def forward(self, x_dict, edge_index_dict, batch_dict, training = False):
+        for conv in self.convs:
+            # conv + relu
+            x_dict = conv(x_dict, edge_index_dict) 
+            x_dict = {key: x.relu() for key, x in x_dict.items()}
+
+
+        # for each node type, aggregate over all nodes of that type
+
+
+        if batch_dict is not None:
+            type_specific_representations = []
+            for key, x in x_dict.items():
+
+                rep = self.aggregation_mode(x_dict[key], batch_dict[key])
+                type_specific_representations.append(rep)
+
+        else:
+            type_specific_representations = []
+            for key, x in x_dict.items():
+                x_dict[key] = self.aggregation_mode(x_dict[key], torch.zeros(x.shape[0], dtype= torch.int64).to(self.device))
+                type_specific_representations.append(rep)
+
+        x = F.dropout(torch.cat(type_specific_representations, dim=1), p=self.dropout, training = training)
+        return self.lin(x)
