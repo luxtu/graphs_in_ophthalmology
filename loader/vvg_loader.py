@@ -1,6 +1,7 @@
 import json
 import pandas as pd
 import numpy as np
+import gzip
 
 def vvg_to_df(vvg_path):
     """ Returns a pandas dataframe that contains all the information of the centerlines of the edges
@@ -16,9 +17,18 @@ def vvg_to_df(vvg_path):
 
     """
     # Opening JSON file
-    f = open(vvg_path)
-    data = json.load(f)
-    f.close()
+
+
+    if vvg_path[-3:] == ".gz":
+        with gzip.open(vvg_path, "rt") as gzipped_file:
+            # Read the decompressed JSON data
+            json_data = gzipped_file.read()
+            data = json.loads(json_data)
+
+    else:
+        f = open(vvg_path)
+        data = json.load(f)
+        f.close()
 
     id_col = []
     pos_col = []
@@ -59,7 +69,7 @@ def vvg_to_df(vvg_path):
         try:
             i["skeletonVoxels"]
         except KeyError:
-            print("fail vessel")
+            #print("fail vessel")
             continue
 
         id_col.append(i["id"])

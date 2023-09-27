@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from line_profiler import LineProfiler
+from torch.nn import functional
 
 class GraphPlotter2D():
 
@@ -94,9 +95,10 @@ class GraphPlotter2D():
 
 class HeteroGraphPlotter2D():
 
+    graph_1_name = "graph_1"
+    graph_2_name = "graph_2"
 
-
-    def plot_graph_2D(self, het_graph , edges= True, ax = None):
+    def plot_graph_2D(self, het_graph , edges= True, ax = None, pred_val_dict = None):
         # create a function that returns a plot of the graph in 2D
         # use the node positions and the edge indices to plot the graph
 
@@ -115,23 +117,43 @@ class HeteroGraphPlotter2D():
             ax.set_yticklabels([])
             ax.set_xticklabels([])
 
+        het_graph1_pos = het_graph[self.graph_1_name].pos.cpu().detach().numpy()
+        het_graph2_pos = het_graph[self.graph_2_name].pos.cpu().detach().numpy()
+
+        if edges:
+            for edge in het_graph[self.graph_1_name, 'to', self.graph_1_name].edge_index.cpu().detach().numpy().T:
+                ax.plot(het_graph1_pos[edge,1], het_graph1_pos[edge,0], c="blue",linewidth=1, alpha=0.5)
+
+            for edge in het_graph[self.graph_2_name, 'to', self.graph_2_name].edge_index.cpu().detach().numpy().T:
+                ax.plot(het_graph2_pos[edge,1], het_graph2_pos[edge,0], c="red",linewidth=1, alpha=0.5)
+            for edge in het_graph[self.graph_1_name, 'to', self.graph_2_name].edge_index.cpu().detach().numpy().T:
+
+                #create a line for each edge 
+
+                x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
+                y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
+
+                ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black")
+                #break
+#
 
 
-        ax.scatter(het_graph["void"].pos[:,1], het_graph["void"].pos[:,0], s = 8)
-        ax.scatter(het_graph["vessel"].pos[:,1], het_graph["vessel"].pos[:,0], s = 8)
+        if pred_val_dict is not None:
+            cls =0
+            sft_max1 = pred_val_dict[self.graph_1_name].cpu().detach()#, dim=1)#functional.softmax(
+            sft_max2 = pred_val_dict[self.graph_2_name].cpu().detach()#, dim=1)#functional.softmax(
 
-        for edge in het_graph['void', 'to', 'void'].edge_index.T:
-            ax.plot(het_graph["void"].pos[edge,1], het_graph["void"].pos[edge,0], c="blue",linewidth=1, alpha=0.5)
+            #print(sft_max1)
 
-        for edge in het_graph['vessel', 'to', 'vessel'].edge_index.T:
-            ax.plot(het_graph["vessel"].pos[edge,1], het_graph["vessel"].pos[edge,0], c="red",linewidth=1, alpha=0.5)
+            max_v = max(pred_val_dict[self.graph_1_name].cpu().detach()[:,cls].max(), pred_val_dict[self.graph_2_name].cpu().detach()[:,cls].max())#1
+            min_v = min(pred_val_dict[self.graph_1_name].cpu().detach()[:,cls].min(), pred_val_dict[self.graph_2_name].cpu().detach()[:,cls].min())#0
 
-        for edge in het_graph['vessel', 'to', 'void'].edge_index.T:
 
-            #create a line for each edge 
+            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1[:,cls], vmin = min_v, vmax = max_v, cmap = "coolwarm")
+            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2[:,cls], vmin = min_v, vmax = max_v, cmap = "coolwarm", marker = "s")
 
-            x_pos = (het_graph["vessel"].pos[edge[0],1], het_graph["void"].pos[edge[1],1])
-            y_pos = (het_graph["vessel"].pos[edge[0],0], het_graph["void"].pos[edge[1],0])
-
-            ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black")
-            #break
+       
+            plt.colorbar(sc2)
+        else:
+            ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8)
+            ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, marker = "s")       

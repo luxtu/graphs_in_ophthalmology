@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from skimage import measure, morphology
 from skimage.morphology import skeletonize
+import json
 
 from utils import vvg_tools
 from loader import vvg_loader
@@ -211,11 +212,14 @@ class VoidGraphGenerator:
 
 class VoidGraphFromVVG:
 
-    def __init__(self, seg_path, vvg_path, save_path):
+    def __init__(self, seg_path, vvg_path, void_graph_save_path, hetero_edges_save_path, debug = False):
 
         self.seg_path = seg_path
         self.vvg_path = vvg_path
-        self.save_path = save_path
+        self.void_graph_save_path = void_graph_save_path
+        self.hetero_edges_save_path = hetero_edges_save_path
+
+        self.debug = debug
 
 
     def save_region_graphs(self):
@@ -231,31 +235,33 @@ class VoidGraphFromVVG:
         vvg_files = sorted(vvg_files)
         seg_files = sorted(seg_files)
 
-        #iterate through matching pairs of files
-        for i, seg_file in enumerate(sorted(seg_files)):
+        # find matching files in both folders, not all the files will be matched
 
-            # extcract all the numbers from the file name
-            pattern = r'\d+'
-            # Use re.findall() to extract all sequences of digits from the string
-            idx_seg = re.findall(pattern, seg_file)[0]
-            idx_vvg = re.findall(pattern, vvg_files[i])[0]
+        pattern = r'\d+'
+        for seg_file in seg_files:
+            for vvg_file in vvg_files:
+                    
+                # Use re.findall() to extract all sequences of digits from the string
+                idx_seg = re.findall(pattern, seg_file)[0]
+                idx_vvg = re.findall(pattern, vvg_file)[0]
+                # check if the numbers are the same
+                idx_check =  idx_seg == idx_vvg
+                # check if both filenames contain either "_OD" or "_OS"
+                eye_check = ("_OD" in seg_file and "_OD" in vvg_file) or ("_OS" in seg_file and "_OS" in vvg_file)
 
-            # check if the numbers are the same
-            assert idx_seg == idx_vvg
+                if idx_check and eye_check:
+                    
+                    if "_OD" in seg_file:
+                        eye = "OD"
+                    else:
+                        eye = "OS"
 
-            # check if both filenames contain either "_OD" or "_OS"
-            assert ("_OD" in seg_file and "_OD" in vvg_files[i]) or ("_OS" in seg_file and "_OS" in vvg_files[i])
+                    print(idx_seg)
+                    idx_dict = idx_seg + "_" + eye
 
-            if "_OD" in seg_file:
-                eye = "OD"
-            else:
-                eye = "OS"
+                    region_graphs[idx_dict] = self.generate_region_graph(seg_file, vvg_file, idx_dict)
 
-            idx_dict = idx_seg + "_" + eye
-
-            region_graphs[idx_dict] = self.generate_region_graph(seg_file, vvg_files[i], idx_dict)
-
-            print(seg_file)
+                    print(seg_file)
 
 
 
@@ -269,6 +275,18 @@ class VoidGraphFromVVG:
         ## region properties don't make sense with extremely small regions
 
         region_labels = measure.label(morphology.remove_small_holes(seg, area_threshold=5, connectivity=1).astype("uint8"), background=1)
+
+        if self.debug:
+            plt.imshow(region_labels)
+            #plt.show()
+
+
+        # sort the labels according to the number of pixels in the region
+        labels, counts = np.unique(region_labels, return_counts=True)
+        count_sort_ind = np.argsort(-counts)
+        #print(labels[count_sort_ind])
+        #print(len(labels))
+        
 
         # remove all the labels that contain less than 9 pixels
         #region_labels = morphology.remove_small_objects(region_labels, min_size=9, connectivity=1)
@@ -288,12 +306,27 @@ class VoidGraphFromVVG:
         
         df = pd.DataFrame(props)
 
+        #print(df.shape)
 
-        df.to_csv(os.path.join(self.save_path, str(idx_dict)+ "_region_nodes" + ".csv"), sep = ";")
 
-        edge_index_df, edge_index_region_vessel_df = self.generate_edge_index(region_labels, vvg_file)
-        edge_index_df.to_csv(os.path.join(self.save_path, str(idx_dict) + "_region_edges"+".csv"), sep = ";")
-        edge_index_region_vessel_df.to_csv(os.path.join(self.save_path, str(idx_dict) + "_region_vessel_edges"+".csv"), sep = ";")
+        try:
+            edge_index_df, edge_index_region_vessel_df = self.generate_edge_index(region_labels, vvg_file)
+        except json.decoder.JSONDecodeError:
+            print("JSONDecodeError")
+            return None
+
+        if not self.debug:
+            df.to_csv(os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes" + ".csv"), sep = ";")
+            edge_index_df.to_csv(os.path.join(self.void_graph_save_path, str(idx_dict) + "_region_edges"+".csv"), sep = ";")
+            edge_index_region_vessel_df.to_csv(os.path.join(self.hetero_edges_save_path, str(idx_dict) + "_region_vessel_edges"+".csv"), sep = ";")
+        else:
+            # plot the nodes
+            plt.scatter(df["centroid-1"], df["centroid-0"], s = 8, c= "orange")
+            # plot the connections between the nodes
+            for id, edge in edge_index_df.iterrows():
+                plt.plot([df["centroid-1"][edge["node1id"]], df["centroid-1"][edge["node2id"]]], [df["centroid-0"][edge["node1id"]], df["centroid-0"][edge["node2id"]]], c = "black", linewidth = 0.5)
+
+            plt.show()
 
 
     def generate_edge_index(self, region_labels, vvg_file):
@@ -302,8 +335,10 @@ class VoidGraphFromVVG:
         # generate the centerline image from the vvg file
         skel_labels = self.generate_skel_labels(vvg_file, region_labels.shape)
 
-        plt.imshow(skel_labels)
-        plt.show()
+        #if self.debug:
+        #    print(np.sum(skel_labels==0))
+        #    plt.imshow(skel_labels==0)
+        #    plt.show()
 
         matching_regions = self.find_matching_regions(skel_labels, region_labels)
 
@@ -353,7 +388,6 @@ class VoidGraphFromVVG:
                             fail += 1
 
                 # create all combinations of the 4 neighbors
-
                 for neighb1 in [n1,n2,n3,n4]:
                     for neighb2 in [n1,n2,n3,n4]:
                         if neighb1 == None or neighb2 == None:
@@ -405,23 +439,51 @@ class VoidGraphFromVVG:
         matched_regions = 0
         failed_regions = 0
 
-        for lab_val in np.unique(seg_labeled):
-            skel_vals, counts = np.unique(skel_labeled[np.where(seg_labeled == lab_val)], return_counts=True) 
+
+        for skel_val in np.unique(skel_labeled)[np.unique(skel_labeled) != 0]:
+            lab_vals, counts = np.unique(seg_labeled[np.where(skel_labeled == skel_val)], return_counts=True) 
 
             count_sort_ind = np.argsort(-counts)
-            skel_vals = skel_vals[count_sort_ind]
+            lab_vals = lab_vals[count_sort_ind]
 
-            if skel_vals[0] ==0:
+            if lab_vals[0] ==0:
                 try:
-                    matching_regions[skel_vals[1]] = lab_val
+                    matching_regions[skel_val] = lab_vals[1]
                     matched_regions += 1
                 except IndexError:
                     failed_regions += 1
                     pass
             else:
-                matching_regions[skel_vals[0]] = lab_val
+                matching_regions[skel_val] = lab_vals[0]
                 matched_regions += 1
 
+        print(matched_regions, failed_regions)
         return matching_regions
 
+
+        # leads to the problem that the same region can be matched to multiple regions
+
+      #   # remove the background label
+      #  for lab_val in np.unique(seg_labeled)[np.unique(seg_labeled) != 0]:
+      #      skel_vals, counts = np.unique(skel_labeled[np.where(seg_labeled == lab_val)], return_counts=True) 
+#
+      #      count_sort_ind = np.argsort(-counts)
+      #      skel_vals = skel_vals[count_sort_ind]
+#
+      #      # e.g. for dict[1] -> 5
+      #      # dict[1] -> 7 could happen later
+#
+      #      if skel_vals[0] ==0:
+      #          try:
+      #              matching_regions[skel_vals[1]] = lab_val
+      #              matched_regions += 1
+      #          except IndexError:
+      #              failed_regions += 1
+      #              pass
+      #      else:
+      #          matching_regions[skel_vals[0]] = lab_val
+      #          matched_regions += 1
+#
+      #  print(matched_regions, failed_regions)
+      #  return matching_regions
 

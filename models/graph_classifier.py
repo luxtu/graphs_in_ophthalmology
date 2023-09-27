@@ -74,7 +74,7 @@ class graphClassifierClassic():
     def __init__(self, model, train_loader, test_loader, loss_func, lr = 0.005, weight_decay = 5e-5):
 
         self.model = model
-        self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr, weight_decay= weight_decay)
+        self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr , weight_decay= weight_decay)
         self.lossFunc = loss_func
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.train_loader = train_loader

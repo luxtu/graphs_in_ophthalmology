@@ -1,13 +1,13 @@
 import torch
-from torch.nn import Linear
+#from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv
+from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, Linear, GATConv
 
 
 
-class GCN_GC(torch.nn.Module):
+class GNN(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, num_layers, dropout, aggregation_mode):
-        super(GCN_GC, self).__init__()
+        super(GNN, self).__init__()
         torch.manual_seed(1234567)
 
         self.in_channels = in_channels
@@ -65,8 +65,9 @@ class GCN_GC(torch.nn.Module):
     
 
 class HeteroGNN(torch.nn.Module):
-    def __init__(self, hidden_channels, out_channels, num_layers, dropout, aggregation_mode):
+    def __init__(self, hidden_channels, out_channels, num_layers, dropout, aggregation_mode ,node_types):
         super().__init__()
+        torch.manual_seed(1234567)
 
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
@@ -74,31 +75,74 @@ class HeteroGNN(torch.nn.Module):
         self.dropout = dropout
         self.aggregation_mode = aggregation_mode
 
+        self.pre_lin_dict = torch.nn.ModuleDict()
+        for node_type in node_types:
+            self.pre_lin_dict[node_type] = Linear(-1, hidden_channels)
 
+        self.post_lin_dict = torch.nn.ModuleDict()
+        for node_type in node_types:
+            self.post_lin_dict[node_type] = Linear(-1, hidden_channels)
+
+            
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HeteroConv({
-                ('void', 'to', 'void'): SAGEConv(-1, hidden_channels),
-                ('vessel', 'to', 'vessel'): SAGEConv(-1, hidden_channels),
+                ('graph_1', 'to', 'graph_1'): SAGEConv(-1, hidden_channels),
+                ('graph_2', 'to', 'graph_2'): SAGEConv(-1, hidden_channels),
+                ('graph_1', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+                ('graph_2', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
             }, aggr='sum')
             self.convs.append(conv)
 
-        self.lin = Linear(hidden_channels*2, out_channels)
+        # linear layers for skip connections
+        self.skip_lin = torch.nn.ModuleList()
+        for _ in range(num_layers):
+            lin = torch.nn.ModuleDict()
+            for node_type in node_types:
+                lin[node_type] = Linear(-1, hidden_channels)
+            self.skip_lin.append(lin)
+
+        # createa batch norm layer for each node type
+        self.batch_norm_dict_pre_conv = torch.nn.ModuleDict()
+        for node_type in node_types:
+            self.batch_norm_dict_pre_conv[node_type] = torch.nn.BatchNorm1d(hidden_channels)
+
+        self.batch_norm_dict_post_conv = torch.nn.ModuleDict()
+        for node_type in node_types:
+            self.batch_norm_dict_post_conv[node_type] = torch.nn.BatchNorm1d(hidden_channels)
+
+        #self.lin1 = Linear(hidden_channels*len(node_types), hidden_channels*len(node_types))
+        #self.lin2 = Linear(hidden_channels*len(node_types), hidden_channels)
+        #self.lin3 = Linear(hidden_channels, out_channels)
+
+
+        self.lin1 = Linear(hidden_channels*len(node_types), hidden_channels)
+        self.lin2 = Linear(hidden_channels, out_channels)
 
     def forward(self, x_dict, edge_index_dict, batch_dict, training = False):
-        for conv in self.convs:
-            # conv + relu
+
+        # linear layer batchnorm and relu
+        for node_type, x in x_dict.items():
+            x_dict[node_type] = self.batch_norm_dict_pre_conv[node_type](self.pre_lin_dict[node_type](x)).relu_()
+
+        # convolutions followed by relu
+        for i, conv in enumerate(self.convs):
+            # apply the conv and then add the skip connections
             x_dict = conv(x_dict, edge_index_dict) 
+            # apply the skip connections
+            for node_type, x in x_dict.items():
+                x_dict[node_type] = x_dict[node_type] + self.skip_lin[i][node_type](x_dict[node_type])
             x_dict = {key: x.relu() for key, x in x_dict.items()}
 
+        # linear layer batchnorm and relu
+        for node_type, x in x_dict.items():
+            x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x)).relu_()
 
         # for each node type, aggregate over all nodes of that type
-
-
         if batch_dict is not None:
             type_specific_representations = []
             for key, x in x_dict.items():
-
+                #print(x_dict[key])
                 rep = self.aggregation_mode(x_dict[key], batch_dict[key])
                 type_specific_representations.append(rep)
 
@@ -109,4 +153,60 @@ class HeteroGNN(torch.nn.Module):
                 type_specific_representations.append(rep)
 
         x = F.dropout(torch.cat(type_specific_representations, dim=1), p=self.dropout, training = training)
-        return self.lin(x)
+        return self.lin2(self.lin1(x)) #self.lin3(self.lin2(self.lin1(x)))
+
+
+
+
+    @torch.no_grad()
+    def vals_without_aggregation(self, x_dict, edge_index_dict):
+
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        # linear layer batchnorm and relu
+        for node_type, x in x_dict.items():
+            x_dict[node_type] = self.batch_norm_dict_pre_conv[node_type](self.pre_lin_dict[node_type](x)).relu_()
+
+        # convolutions followed by relu
+        for i, conv in enumerate(self.convs):
+            # apply the conv and then add the skip connections
+            x_dict = conv(x_dict, edge_index_dict) 
+            # apply the skip connections
+            for node_type, x in x_dict.items():
+                x_dict[node_type] = x_dict[node_type] + self.skip_lin[i][node_type](x_dict[node_type])
+            x_dict = {key: x.relu() for key, x in x_dict.items()}
+
+        # linear layer batchnorm and relu
+        for node_type, x in x_dict.items():
+            x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x)).relu_()
+
+
+        
+        # for each node type apply the part of the linear layer that corresponds to that node type
+        ct = -1
+        for node_type, x in x_dict.items():
+            ct +=1
+            # use only part of the linear layer that corresponds to that node type
+            # extract the first half of the weights of the linear layer
+
+
+            Lin = Linear(self.lin1.weight.shape[1]//2, self.lin1.weight.shape[0]).to(device)
+
+
+            # Save the state dict of the larger linear layer
+            larger_state_dict = self.lin1.state_dict()
+
+            # Extract weights for the first 5 input features from the larger linear layer
+            weights_to_transfer = larger_state_dict['weight'][:, ct*self.lin1.weight.shape[1]//2:(ct+1)*self.lin1.weight.shape[1]//2]
+
+            # Modify the state dict of the smaller linear layer with the extracted weights
+            smaller_state_dict = Lin.state_dict()
+            smaller_state_dict['weight'] = weights_to_transfer
+
+            # Load the modified state dict into the smaller linear layer
+            Lin.load_state_dict(smaller_state_dict)
+
+            x_dict[node_type] = Lin(x)
+
+        return x_dict
