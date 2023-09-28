@@ -87,8 +87,8 @@ class HeteroGNN(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HeteroConv({
-                ('graph_1', 'to', 'graph_1'): SAGEConv(-1, hidden_channels),
-                ('graph_2', 'to', 'graph_2'): SAGEConv(-1, hidden_channels),
+                ('graph_1', 'to', 'graph_1'): GATConv(-1, hidden_channels),
+                ('graph_2', 'to', 'graph_2'): GATConv(-1, hidden_channels),
                 ('graph_1', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
                 ('graph_2', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
             }, aggr='sum')
@@ -111,13 +111,11 @@ class HeteroGNN(torch.nn.Module):
         for node_type in node_types:
             self.batch_norm_dict_post_conv[node_type] = torch.nn.BatchNorm1d(hidden_channels)
 
-        #self.lin1 = Linear(hidden_channels*len(node_types), hidden_channels*len(node_types))
-        #self.lin2 = Linear(hidden_channels*len(node_types), hidden_channels)
-        #self.lin3 = Linear(hidden_channels, out_channels)
 
+        self.singleLin = Linear(hidden_channels*len(node_types), out_channels)
 
-        self.lin1 = Linear(hidden_channels*len(node_types), hidden_channels)
-        self.lin2 = Linear(hidden_channels, out_channels)
+        #self.lin1 = Linear(hidden_channels*len(node_types), hidden_channels)
+        #self.lin2 = Linear(hidden_channels, out_channels)
 
     def forward(self, x_dict, edge_index_dict, batch_dict, training = False):
 
@@ -153,7 +151,7 @@ class HeteroGNN(torch.nn.Module):
                 type_specific_representations.append(rep)
 
         x = F.dropout(torch.cat(type_specific_representations, dim=1), p=self.dropout, training = training)
-        return self.lin2(self.lin1(x)) #self.lin3(self.lin2(self.lin1(x)))
+        return self.singleLin(x) #self.lin2(self.lin1(x)) #self.lin3(self.lin2(self.lin1(x)))
 
 
 
@@ -163,6 +161,10 @@ class HeteroGNN(torch.nn.Module):
 
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        ######################
+        # same as before
+        ######################
 
         # linear layer batchnorm and relu
         for node_type, x in x_dict.items():
@@ -181,6 +183,9 @@ class HeteroGNN(torch.nn.Module):
         for node_type, x in x_dict.items():
             x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x)).relu_()
 
+        ######################
+        # end of same as before
+        ######################
 
         
         # for each node type apply the part of the linear layer that corresponds to that node type
@@ -191,14 +196,13 @@ class HeteroGNN(torch.nn.Module):
             # extract the first half of the weights of the linear layer
 
 
-            Lin = Linear(self.lin1.weight.shape[1]//2, self.lin1.weight.shape[0]).to(device)
-
+            Lin = Linear(self.singleLin.weight.shape[1]//2, self.singleLin.weight.shape[0]).to(device)
 
             # Save the state dict of the larger linear layer
-            larger_state_dict = self.lin1.state_dict()
+            larger_state_dict = self.singleLin.state_dict()
 
             # Extract weights for the first 5 input features from the larger linear layer
-            weights_to_transfer = larger_state_dict['weight'][:, ct*self.lin1.weight.shape[1]//2:(ct+1)*self.lin1.weight.shape[1]//2]
+            weights_to_transfer = larger_state_dict['weight'][:, ct*self.singleLin.weight.shape[1]//2:(ct+1)*self.singleLin.weight.shape[1]//2]
 
             # Modify the state dict of the smaller linear layer with the extracted weights
             smaller_state_dict = Lin.state_dict()

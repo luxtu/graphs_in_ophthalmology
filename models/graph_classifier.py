@@ -126,11 +126,6 @@ class graphClassifierClassic():
 
 
 
-
-
-
-
-
 class graphClassifierHetero():
     def __init__(self, model, train_loader, test_loader, loss_func, lr = 0.005, weight_decay = 5e-5):
 
