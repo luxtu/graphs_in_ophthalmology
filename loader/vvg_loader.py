@@ -12,7 +12,8 @@ def vvg_to_df(vvg_path):
 
 
     Returns
-    df: A dataframe containing information for every edge (e.g. centerline)
+    df_edge: A dataframe containing information for every edge (e.g. centerline)
+    df_nodes: A dataframe containing information for every node
     -------
 
     """
