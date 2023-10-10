@@ -1,7 +1,7 @@
 import torch
 #from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, Linear, GATConv
+from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, Linear, GATConv, EdgeConv
 
 
 
@@ -87,8 +87,8 @@ class HeteroGNN(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HeteroConv({
-                ('graph_1', 'to', 'graph_1'): GATConv(-1, hidden_channels),
-                ('graph_2', 'to', 'graph_2'): GATConv(-1, hidden_channels),
+                ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels),
+                ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
                 ('graph_1', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
                 ('graph_2', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
             }, aggr='sum')
@@ -112,29 +112,15 @@ class HeteroGNN(torch.nn.Module):
             self.batch_norm_dict_post_conv[node_type] = torch.nn.BatchNorm1d(hidden_channels)
 
 
-        self.singleLin = Linear(hidden_channels*len(node_types), out_channels)
+        #self.singleLin = Linear(hidden_channels*len(node_types), out_channels)
 
-        #self.lin1 = Linear(hidden_channels*len(node_types), hidden_channels)
-        #self.lin2 = Linear(hidden_channels, out_channels)
+        self.lin1 = Linear(hidden_channels*len(node_types), hidden_channels)
+        self.lin2 = Linear(hidden_channels, out_channels)
 
     def forward(self, x_dict, edge_index_dict, batch_dict, training = False):
 
-        # linear layer batchnorm and relu
-        for node_type, x in x_dict.items():
-            x_dict[node_type] = self.batch_norm_dict_pre_conv[node_type](self.pre_lin_dict[node_type](x)).relu_()
 
-        # convolutions followed by relu
-        for i, conv in enumerate(self.convs):
-            # apply the conv and then add the skip connections
-            x_dict = conv(x_dict, edge_index_dict) 
-            # apply the skip connections
-            for node_type, x in x_dict.items():
-                x_dict[node_type] = x_dict[node_type] + self.skip_lin[i][node_type](x_dict[node_type])
-            x_dict = {key: x.relu() for key, x in x_dict.items()}
-
-        # linear layer batchnorm and relu
-        for node_type, x in x_dict.items():
-            x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x)).relu_()
+        x_dict = self.forward_core(x_dict, edge_index_dict)
 
         # for each node type, aggregate over all nodes of that type
         if batch_dict is not None:
@@ -147,25 +133,15 @@ class HeteroGNN(torch.nn.Module):
         else:
             type_specific_representations = []
             for key, x in x_dict.items():
-                x_dict[key] = self.aggregation_mode(x_dict[key], torch.zeros(x.shape[0], dtype= torch.int64).to(self.device))
+                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                rep = self.aggregation_mode(x_dict[key], torch.zeros(x.shape[0], dtype= torch.int64).to(device))
                 type_specific_representations.append(rep)
 
         x = F.dropout(torch.cat(type_specific_representations, dim=1), p=self.dropout, training = training)
-        return self.singleLin(x) #self.lin2(self.lin1(x)) #self.lin3(self.lin2(self.lin1(x)))
+        return self.lin2(self.lin1(x).relu_()) #self.singleLin(x) #self.lin3(self.lin2(self.lin1(x)))
 
 
-
-
-    @torch.no_grad()
-    def vals_without_aggregation(self, x_dict, edge_index_dict):
-
-
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-        ######################
-        # same as before
-        ######################
-
+    def forward_core(self, x_dict, edge_index_dict):
         # linear layer batchnorm and relu
         for node_type, x in x_dict.items():
             x_dict[node_type] = self.batch_norm_dict_pre_conv[node_type](self.pre_lin_dict[node_type](x)).relu_()
@@ -182,6 +158,20 @@ class HeteroGNN(torch.nn.Module):
         # linear layer batchnorm and relu
         for node_type, x in x_dict.items():
             x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x)).relu_()
+
+        return x_dict
+
+    @torch.no_grad()
+    def vals_without_aggregation(self, x_dict, edge_index_dict):
+
+
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+        ######################
+        # same as before
+        ######################
+
+        self.forward_core(x_dict, edge_index_dict)
 
         ######################
         # end of same as before
