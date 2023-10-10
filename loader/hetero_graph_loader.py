@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from torch_geometric.data import Data, HeteroData
 from torch_geometric.transforms import ToUndirected
-
+from sklearn.model_selection import train_test_split
 
 class HeteroGraphLoaderTorch:
 
@@ -14,6 +14,7 @@ class HeteroGraphLoaderTorch:
                  graph_path_1, 
                  graph_path_2, 
                  hetero_edges_path_12, 
+                 mode,
                  label_file = None, 
                  line_graph_1 = False, 
                  line_graph_2 = False, 
@@ -24,6 +25,7 @@ class HeteroGraphLoaderTorch:
         self.graph_path_2 = graph_path_2
         self.hetero_edges_path_12 = hetero_edges_path_12
         self.label_file = label_file
+        self.mode = mode
 
         if class_dict is not None:
             self.octa_dr_dict = class_dict
@@ -51,6 +53,7 @@ class HeteroGraphLoaderTorch:
         graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
 
         self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
+        self.hetero_graph_list = list(self.hetero_graphs.values())
 
 
 
@@ -170,6 +173,19 @@ class HeteroGraphLoaderTorch:
     def read_labels(self, label_file):
         label_data = pd.read_csv(label_file)
 
+
+        train, temp = train_test_split(label_data, test_size=0.3, random_state=42, stratify=label_data["Group"])
+        test, val = train_test_split(temp, test_size=0.5, random_state=42, stratify=temp["Group"])
+        del temp
+
+        if self.mode == "train":
+            label_data = train            
+        elif self.mode == "test":
+            label_data = test
+        elif self.mode == "val":
+            label_data = val
+
+
         label_dict = {}
 
         for i, row in label_data.iterrows():
@@ -195,6 +211,13 @@ class HeteroGraphLoaderTorch:
             else:
                 eye = "OS"
             idx_dict = idx + "_" + eye
+
+            if self.label_data is not None:
+                try:
+                    disease = self.label_data[idx_dict]
+                except KeyError:
+                    continue
+
             if "edges" in str(file):
                 try:
                     edge_dict[idx_dict] = pd.read_csv(os.path.join(
@@ -282,3 +305,18 @@ class HeteroGraphLoaderTorch:
             line_graph_dict[key] = line_graph
 
         return line_graph_dict
+    
+
+
+    def __len__(self):
+        return len(self.hetero_graph_list)
+    
+    def __getitem__(self, idx):
+        return self.hetero_graph_list[idx]
+    
+
+    def to(self, device):
+        for graph in self.hetero_graph_list:
+            graph.to(device)
+        return self
+    

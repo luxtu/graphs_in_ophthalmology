@@ -4,19 +4,22 @@ from PIL import Image
 import pandas as pd
 import re
 from torch import from_numpy
-
+from sklearn.model_selection import train_test_split
 
 class CNNImageLoader():
 
     octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 1, "Early NPDR": 2, "Late NPDR": 2}
 
-    def __init__(self, path, label_file, image_size, transform=None):
+    def __init__(self, path, label_file, mode, transform=None):
         self.path = path
         self.label_path = label_file
-        self.image_size = image_size
+        self.mode = mode
         self.labels = self.read_labels()
         self.images, self.image_names = self.read_images()
         self.transform = transform
+
+
+
 
 
     def read_images(self):
@@ -25,9 +28,9 @@ class CNNImageLoader():
         for filename in os.listdir(self.path):
             # load all png files, and adjust their size
             if filename.endswith(".png"):
-                img = Image.open(os.path.join(self.path, filename)).convert('RGB')
                 
                 idx = re.findall(r'\d+', str(filename))[0]
+                # convert to string with leading zeros, 4 digits
                 idx = str(idx).zfill(4)
                 if "_OD" in filename:
                     eye = "OD"
@@ -37,10 +40,11 @@ class CNNImageLoader():
                 try:
                     self.labels[idx_name]
                 except KeyError:
-                    print("No label for image: ", idx_name)
+                    #print("No label for image: ", idx_name)
                     continue
 
-                # convert to string with leading zeros, 4 digits
+                
+                img = Image.open(os.path.join(self.path, filename)).convert('RGB')
                 image_names.append(idx_name)
                 images.append(img)
 
@@ -49,6 +53,17 @@ class CNNImageLoader():
 
     def read_labels(self):
         label_data = pd.read_csv(self.label_path)
+
+        train, temp = train_test_split(label_data, test_size=0.3, random_state=42, stratify=label_data["Group"])
+        test, val = train_test_split(temp, test_size=0.5, random_state=42, stratify=temp["Group"])
+        del temp
+
+        if self.mode == "train":
+            label_data = train            
+        elif self.mode == "test":
+            label_data = test
+        elif self.mode == "val":
+            label_data = val
 
         label_dict = {}
 
