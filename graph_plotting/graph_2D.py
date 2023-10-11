@@ -125,21 +125,17 @@ class HeteroGraphPlotter2D():
 
         if edges:
             for edge in het_graph[self.graph_1_name, 'to', self.graph_1_name].edge_index.cpu().detach().numpy().T:
-                ax.plot(het_graph1_pos[edge,1], het_graph1_pos[edge,0], c="blue",linewidth=1, alpha=0.5)
-
+                ax.plot(het_graph1_pos[edge,1], het_graph1_pos[edge,0], c="blue",linewidth=1, alpha=0.5, zorder = 1)
             for edge in het_graph[self.graph_2_name, 'to', self.graph_2_name].edge_index.cpu().detach().numpy().T:
-                ax.plot(het_graph2_pos[edge,1], het_graph2_pos[edge,0], c="red",linewidth=1, alpha=0.5)
+                ax.plot(het_graph2_pos[edge,1], het_graph2_pos[edge,0], c="red",linewidth=1, alpha=0.5, zorder = 1)
             for edge in het_graph[self.graph_1_name, 'to', self.graph_2_name].edge_index.cpu().detach().numpy().T:
-
                 #create a line for each edge 
-
                 x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
                 y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
-
-                ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black")
+#
+                ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
                 #break
 #
-
 
         if pred_val_dict is not None:
 
@@ -153,8 +149,8 @@ class HeteroGraphPlotter2D():
 
             upper_range = max(max_v, abs(min_v))
 
-            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1[:,self.cls], vmin = -upper_range, vmax = upper_range, cmap = "coolwarm")
-            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2[:,self.cls], vmin = -upper_range, vmax = upper_range, cmap = "coolwarm", marker = "s")
+            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1[:,self.cls], vmin = -upper_range, vmax = upper_range, cmap = "coolwarm", zorder = 2)
+            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2[:,self.cls], vmin = -upper_range, vmax = upper_range, cmap = "coolwarm", zorder = 2, marker = "s")
 
        
             plt.colorbar(sc2)
