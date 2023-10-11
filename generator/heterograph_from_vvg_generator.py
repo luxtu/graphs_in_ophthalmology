@@ -25,45 +25,77 @@ class HeterographFromVVGGenerator:
         self.image_path = image_path
 
         self.debug = debug
+        self.force = False
+
+    def check_existing_heterograph(self, idx_dict):
+        # check if there is already a heterograph file stored with this index in the save path
+        # if there is, return True, else return False
+        if os.path.exists(os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes" + ".csv")):
+            return True
+        else:
+            return False
 
     def find_matching_files(self, seg_files, vvg_files, image_files = None):
         pattern = r'\d+'
-        for seg_file in seg_files:
-            for vvg_file in vvg_files:
+
+        #extract the indices once from all the files
+        seg_file_indx = [re.findall(pattern, file)[0] for file in seg_files]
+        vvg_file_indx = [re.findall(pattern, file)[0] for file in vvg_files]
+
+        # OD = True
+        # OS = False
+        seg_file_eye = [True if "_OD" in file else False for file in seg_files]
+        vvg_file_eye = [True if "_OD" in file else False for file in vvg_files]
+
+        if image_files is not None:
+            image_file_indx = [re.findall(pattern, file)[0] for file in image_files]
+            image_file_eye = [True if "_OD" in file else False for file in image_files]
+
+
+        for i, seg_file in enumerate(seg_files):
+            found_match = False
+            
+            for j, vvg_file in enumerate(vvg_files):
                 # Use re.findall() to extract all sequences of digits from the string
-                idx_seg = re.findall(pattern, seg_file)[0]
-                idx_vvg = re.findall(pattern, vvg_file)[0]
+                idx_seg = seg_file_indx[i]
+                idx_vvg = vvg_file_indx[j]
+
+                # check if the segmentation file and the vvg file have the same index and eye
+                if idx_seg != idx_vvg or seg_file_eye[i] != vvg_file_eye[j]:
+                    continue
+
 
                 if image_files is not None:
-                    for image_file in image_files:
-                        idx_image = re.findall(pattern, image_file)[0]
+                    for k, image_file in enumerate(image_files):
+                        idx_image = image_file_indx[k]
                         # check if the numbers are the same
                         idx_check =  idx_seg == idx_vvg == idx_image
-                        # check if both filenames contain either "_OD" or "_OS"
-                        eye_check = ("_OD" in seg_file and "_OD" in vvg_file and "_OD" in image_file) or ("_OS" in seg_file and "_OS" in vvg_file and "_OS" in image_file)
+                        # check if all filenames contain either "_OD" or "_OS"
+                        eye_check = seg_file_eye[i] == vvg_file_eye[j] == image_file_eye[k]
                         if idx_check and eye_check:
-                            if "_OD" in seg_file:
-                                eye = "OD"
-                            else:
-                                eye = "OS"
+                            eye = "OD" if seg_file_eye[i] else "OS"
                             idx_dict = idx_seg + "_" + eye
                             print(idx_dict)
-                            self.generate_region_graph(seg_file, vvg_file, idx_dict, image_file)
-                    
-                else:
-                    # check if the numbers are the same
-                    idx_check =  idx_seg == idx_vvg
-                    # check if both filenames contain either "_OD" or "_OS"
-                    eye_check = ("_OD" in seg_file and "_OD" in vvg_file) or ("_OS" in seg_file and "_OS" in vvg_file)
-                    if idx_check and eye_check:
+                            # only regenerate the graph if it does not exist yet or if the force flag is set
+                            if not self.check_existing_heterograph(idx_dict) or self.force:
+                                self.generate_region_graph(seg_file, vvg_file, idx_dict, image_file)
 
-                        if "_OD" in seg_file:
-                            eye = "OD"
-                        else:
-                            eye = "OS"
-                        idx_dict = idx_seg + "_" + eye
-                        print(idx_dict)
+                            # break of inner loop
+                            found_match = True
+                            break
+
+                else:
+                    # if the idx and eye do not match the loop will continue 
+                    eye = "OD" if seg_file_eye[i] else "OS"
+                    idx_dict = idx_seg + "_" + eye
+                    print(idx_dict)
+                    # only regenerate the graph if it does not exist yet or if the force flag is set
+                    if not self.check_existing_heterograph(idx_dict) or self.force:
                         self.generate_region_graph(seg_file, vvg_file, idx_dict)
+
+                # break of outer loop
+                if found_match:
+                    break
 
 
     def save_region_graphs(self):
