@@ -74,6 +74,7 @@ class HeteroGNN(torch.nn.Module):
         self.num_layers = num_layers
         self.dropout = dropout
         self.aggregation_mode = aggregation_mode
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         self.pre_lin_dict = torch.nn.ModuleDict()
         for node_type in node_types:
@@ -114,33 +115,60 @@ class HeteroGNN(torch.nn.Module):
 
         #self.singleLin = Linear(hidden_channels*len(node_types), out_channels)
 
-        self.lin1 = Linear(hidden_channels*len(node_types), hidden_channels)
+        self.lin1 = Linear(-1, hidden_channels) # hidden_channels*len(node_types)
         self.lin2 = Linear(hidden_channels, out_channels)
 
-    def forward(self, x_dict, edge_index_dict, batch_dict, training = False):
+    def forward(self, x_dict, edge_index_dict, batch_dict, slice_dict, training = False):
 
 
         x_dict = self.forward_core(x_dict, edge_index_dict)
 
         # for each node type, aggregate over all nodes of that type
-        if batch_dict is not None:
-            type_specific_representations = []
-            for key, x in x_dict.items():
-                #print(x_dict[key])
-                rep = self.aggregation_mode(x_dict[key], batch_dict[key])
-                type_specific_representations.append(rep)
+        #if batch_dict is not None:
+        type_specific_representations = []
+        for key, x in x_dict.items():
+            rep = self.aggregation_mode(x_dict[key], batch_dict[key])
+            type_specific_representations.append(rep)
 
-        else:
-            type_specific_representations = []
-            for key, x in x_dict.items():
-                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-                rep = self.aggregation_mode(x_dict[key], torch.zeros(x.shape[0], dtype= torch.int64).to(device))
-                type_specific_representations.append(rep)
+        #else:
+        #    type_specific_representations = []
+        #    for key, x in x_dict.items():
+        #        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        #        rep = self.aggregation_mode(x_dict[key], torch.zeros(x.shape[0], dtype= torch.int64).to(device))
+        #        type_specific_representations.append(rep)
 
-        x = F.dropout(torch.cat(type_specific_representations, dim=1), p=self.dropout, training = training)
+
+        #x = F.dropout(torch.cat(type_specific_representations, dim=1), p=self.dropout, training = training)
+        # concatenate the representations of the different node types
+        x = torch.cat(type_specific_representations, dim=1)
+        # add the hetero edges (num_edges["graph_1", "to", "graph_2"] as features
+        
+        #start from second key
+        node_keys = list(x_dict.keys())
+        edge_keys = list(edge_index_dict.keys())[:-1]
+
+        graph_level_feature_len = len(node_keys)+len(edge_keys)
+        graph_level_features = torch.zeros((x.shape[0],graph_level_feature_len)).to(self.device)
+
+        # these features should be scaled 
+        idx = 0
+        for key in node_keys:
+            graph_level_features[:,idx] = torch.diff(slice_dict[key]["x"], dim=0)
+            idx +=1
+        for key in edge_keys:
+            graph_level_features[:,idx] = torch.diff(slice_dict[key]["edge_index"], dim=0)
+            idx +=1
+
+        x = torch.cat((x, graph_level_features), dim=1)        
+
+
+        x = F.dropout(x, p=self.dropout, training = training)
+
+
         return self.lin2(self.lin1(x).relu_()) #self.singleLin(x) #self.lin3(self.lin2(self.lin1(x)))
 
 
+        
     def forward_core(self, x_dict, edge_index_dict):
         # linear layer batchnorm and relu
         for node_type, x in x_dict.items():
