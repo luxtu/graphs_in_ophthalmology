@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 *.gif
 *.pkl
+*.pt
 wandb
 saved_data
 data
