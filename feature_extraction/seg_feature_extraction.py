@@ -3,6 +3,7 @@ import numpy as np
 import os
 import re
 from PIL import Image
+from skimage import measure, morphology
 
 class SegFeatureExtractor():
 
@@ -54,6 +55,14 @@ class SegFeatureExtractor():
     def extract_features_from_seg(self, img):
         features = []
         img = img.astype(bool)
+
+        vessel_density_features = self.vessel_density_features(img)
+        features += vessel_density_features
+
+        return features
+
+
+    def vessel_density_features(self, img):
         global_mask_ratio = np.sum(img) / img.size
 
         # get the ratio of the mask in the 4 quadrants
@@ -70,13 +79,9 @@ class SegFeatureExtractor():
         bottom_right = img[img.shape[0]//2:, img.shape[1]//2:]
         bottom_right_ratio = np.sum(bottom_right) / bottom_right.size
 
-        features.append(global_mask_ratio)
-        features.append(top_left_ratio)
-        features.append(top_right_ratio)
-        features.append(bottom_left_ratio)
-        features.append(bottom_right_ratio)
+        return [global_mask_ratio, top_left_ratio, top_right_ratio, bottom_left_ratio, bottom_right_ratio]
 
-        return features
+            
 
 
     def get_feature_dict(self):
