@@ -41,6 +41,23 @@ def eval_roc_auc(groundTruth, predicted):
 
     return res
 
+def roc_auc_multiclass(groundtruth, predicted):
+    # Binarize the groundtruth labels
+    cls_int = np.arange(predicted.shape[1])
+    y = label_binarize(groundtruth, classes=cls_int)
+
+    # Compute ROC curve and ROC area for each class
+    fpr = dict()
+    tpr = dict()
+    roc_auc = dict()
+
+    n_classes = y.shape[1]
+
+    for i in range(n_classes):
+        fpr[i], tpr[i], _ = roc_curve(y[:, i], predicted[:, i])
+        roc_auc[i] = auc(fpr[i], tpr[i])
+
+    return fpr, tpr, roc_auc
 
 
 def plot_roc_curve(groundtruth, predicted, class_labels=None):
@@ -56,20 +73,7 @@ def plot_roc_curve(groundtruth, predicted, class_labels=None):
     - None (displays the plot)
     """
 
-    # Binarize the groundtruth labels
-    cls_int = np.arange(predicted.shape[1])
-    y = label_binarize(groundtruth, classes=cls_int)
-
-    # Compute ROC curve and ROC area for each class
-    fpr = dict()
-    tpr = dict()
-    roc_auc = dict()
-
-    n_classes = y.shape[1]
-
-    for i in range(n_classes):
-        fpr[i], tpr[i], _ = roc_curve(y[:, i], predicted[:, i])
-        roc_auc[i] = auc(fpr[i], tpr[i])
+    fpr, tpr, roc_auc = roc_auc_multiclass(groundtruth, predicted)
 
     # Plot ROC curves
     plt.figure(figsize=(8, 6))
