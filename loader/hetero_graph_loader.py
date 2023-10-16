@@ -80,7 +80,7 @@ class HeteroGraphLoaderTorch:
         test, val = train_test_split(temp, test_size=0.5, random_state=42, stratify=temp["Group"])
         del temp
 
-        _, debug = train_test_split(label_data, test_size=0.05, random_state=42, stratify=label_data["Group"])
+        _, debug = train_test_split(test, test_size=0.10, random_state=42, stratify=test["Group"])
 
         if self.mode == "train":
             label_data = train            
