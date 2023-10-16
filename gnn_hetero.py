@@ -8,7 +8,7 @@ from models import graph_classifier, gnn_models
 from torch_geometric.loader import DataLoader
 from torch_geometric.transforms import Compose, RemoveIsolatedNodes
 
-
+from sklearn.metrics import roc_auc_score
 from utils import prep
 from evaluation import evaluation
 import wandb
@@ -19,29 +19,28 @@ import wandb
 sweep_configuration = {
     "method": "bayes",
     "name": "sweep",
-    "metric": {"goal": "maximize", "name": "val_bal_acc"},
+    "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
         "batch_size": {"values": [16, 32, 64]},
-        "epochs": {"values": [100]},
-        "lr": {"max": 0.05, "min": 0.0001}, # learning rate to high does not work
+        "epochs": {"values": [200]},
+        "lr": {"max": 0.05, "min": 0.005}, # learning rate to high does not work
         "weight_decay": {"max": 0.01, "min": 0.00001},
-        "hidden_channels": {"values": [32, 64, 128]},
-        "dropout": {"values": [0.2, 0.3, 0.4]},
+        "hidden_channels": {"values": [64, 128]},
+        "dropout": {"values": [0.3, 0.4]}, # 0.2,  more droput looks better
         "num_layers": {"values": [1,2,3]},
-        "aggregation_mode": {"values": ["global_mean_pool", "global_max_pool"]},#, "global_add_pool" # add pool does not work
-        "class_weights": {"values": ["balanced", "unbalanced"]},
+        "aggregation_mode": {"values": ["global_mean_pool"]},#, "global_mean_pool",  "global_add_pool" # add pool does not work
+        "class_weights": {"values": ["unbalanced"]}, # "balanced", 
         "dataset": {"values": ["DCP"]} #, "DCP"
     },
 }
 
 sweep_id = wandb.sweep(sweep=sweep_configuration, project="graph_pathology")
-
-
 # loading data
 
 data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
 
 octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 1, "Early NPDR": 2, "Late NPDR": 2}
+label_names = ["Healthy/DM", "PDR", "NPDR"]
 
 vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
 void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
@@ -65,6 +64,15 @@ test_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(vessel_graph_path,
                                                         line_graph_1 =True, 
                                                         class_dict = octa_dr_dict)
 
+# remove isolated nodes
+for data in train_dataset:
+    RemoveIsolatedNodes()(data) 
+
+for data in test_dataset:
+    RemoveIsolatedNodes()(data) 
+
+
+
 # imputation and normalization
 prep.hetero_graph_imputation(train_dataset)
 prep.hetero_graph_imputation(test_dataset)
@@ -73,12 +81,6 @@ node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(tra
 prep.hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
 prep.hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)
 
-# remove isolated nodes
-for data in train_dataset:
-    RemoveIsolatedNodes()(data) 
-
-for data in test_dataset:
-    RemoveIsolatedNodes()(data) 
 
 # class weight extraction
 train_labels = [int(data.y[0]) for data in train_dataset]
@@ -87,7 +89,6 @@ class_weights = prep.get_class_weights(train_labels, verbose=False)
 
 
 num_classes = 3
-epochs = 200
 node_types = ["graph_1", "graph_2"]
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -95,13 +96,17 @@ agg_mode_dict = {"global_mean_pool": global_mean_pool, "global_max_pool": global
 
 
 
-
-
-
-
-
 def main():
     run = wandb.init()
+    api = wandb.Api()
+    sweep = api.sweep("luxtu/graph_pathology/" + sweep_id)
+    try: 
+        th_swp = sweep.best_run(order='best_val_bal_acc').summary_metrics['best_val_bal_acc']
+    except KeyError:
+        th_swp = 0
+    except AttributeError:
+        th_swp = 0
+
     # create the model
     model = gnn_models.HeteroGNN(hidden_channels = wandb.config.hidden_channels, 
                               out_channels= num_classes, 
@@ -124,6 +129,7 @@ def main():
     classifier = graph_classifier.graphClassifierHetero(model, train_loader, test_loader, loss_dict[wandb.config.class_weights], lr = wandb.config.lr, weight_decay =wandb.config.weight_decay)
 
     best_val_bal_acc = 0
+    best_pred = None
     for epoch in range(1, wandb.config.epochs + 1):
         loss = classifier.train()
         train_acc = classifier.test(train_loader)
@@ -138,10 +144,23 @@ def main():
 
         if test_bal_acc > best_val_bal_acc:
             best_val_bal_acc = test_bal_acc
-            torch.save(model.state_dict(), f'./model_{wandb.config.aggregation_mode}.pt')
+            best_pred = outList
+
+            if best_val_bal_acc > th_swp:
+                torch.save(model.state_dict(), f'./model_{wandb.config.aggregation_mode}_best.pt')
              
 
         wandb.log({"loss": loss, "train_acc": train_acc, "val_acc": test_acc, "val_bal_acc": test_bal_acc, "best_val_bal_acc": best_val_bal_acc})
+
+
+    wandb.log({"roc": wandb.plot.roc_curve(y_t, torch.nn.functional.softmax(torch.tensor(np.array(best_pred).squeeze()), dim = 1),labels = label_names)})
+
+    _, _, roc_auc = evaluation.roc_auc_multiclass(y_t, torch.nn.functional.softmax(torch.tensor(np.array(best_pred).squeeze()), dim = 1))
+    #roc_auc = roc_auc_score(y_t, torch.nn.functional.softmax(torch.tensor(np.array(best_pred).squeeze()), dim = 1), multi_class='ovr')
+    print(roc_auc)
+    for i in range(num_classes):
+        wandb.log({f"roc_auc_{label_names[i]}": roc_auc[i]})
+
 
         #if balanced_accuracy_score(y_t, y_p) > 0.70:
         #    fig, ax = plt.subplots()
