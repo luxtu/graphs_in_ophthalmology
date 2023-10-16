@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from line_profiler import LineProfiler
 from torch.nn import functional
+from matplotlib import colors
 
 class GraphPlotter2D():
 
@@ -98,12 +99,18 @@ class HeteroGraphPlotter2D():
     graph_1_name = "graph_1"
     graph_2_name = "graph_2"
 
+    def set_val_range(self, upper_range, lower_range):
+        self.upper_range = upper_range
+        self.lower_range = lower_range
+
+
     def set_cls(self, cls):
         self.cls = cls
 
     def plot_graph_2D(self, het_graph , edges= True, ax = None, pred_val_dict = None):
         # create a function that returns a plot of the graph in 2D
         # use the node positions and the edge indices to plot the graph
+
 
         if ax is None:
             fig, ax = plt.subplots()
@@ -144,15 +151,23 @@ class HeteroGraphPlotter2D():
             sft_max2 = pred_val_dict[self.graph_2_name].cpu().detach()#, dim=1)#functional.softmax(
 
 
-            max_v = max(pred_val_dict[self.graph_1_name].cpu().detach()[:,self.cls].max(), pred_val_dict[self.graph_2_name].cpu().detach()[:,self.cls].max())#1
-            min_v = min(pred_val_dict[self.graph_1_name].cpu().detach()[:,self.cls].min(), pred_val_dict[self.graph_2_name].cpu().detach()[:,self.cls].min())#0
+            #max_v = max(pred_val_dict[self.graph_1_name].cpu().detach()[:,self.cls].max(), pred_val_dict[self.graph_2_name].cpu().detach()[:,self.cls].max())#1
+            #min_v = min(pred_val_dict[self.graph_1_name].cpu().detach()[:,self.cls].min(), pred_val_dict[self.graph_2_name].cpu().detach()[:,self.cls].min())#0
 
-            upper_range = max(max_v, abs(min_v))
+            #upper_range = max(max_v, abs(min_v))
+            if not hasattr(self, "upper_range"):
+                upper_range = max(sft_max1.max(), sft_max2.max())
+                lower_range = min(sft_max1.min(), sft_max2.min())
+            else:
+                upper_range = self.upper_range
+                lower_range = self.lower_range
 
-            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1[:,self.cls], vmin = -upper_range, vmax = upper_range, cmap = "coolwarm", zorder = 2)
-            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2[:,self.cls], vmin = -upper_range, vmax = upper_range, cmap = "coolwarm", zorder = 2, marker = "s")
+            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Oranges", zorder = 2, vmin = lower_range, vmax = upper_range ) #,alpha = sft_max1
+            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, marker = "s" , vmin = lower_range, vmax = upper_range) #alpha = sft_max2 
 
-       
+            #[:,self.cls]
+            #[:,self.cls]
+
             plt.colorbar(sc2)
         else:
             ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8)

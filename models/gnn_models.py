@@ -84,6 +84,12 @@ class HeteroGNN(torch.nn.Module):
         for node_type in node_types:
             self.post_lin_dict[node_type] = Linear(-1, hidden_channels)
 
+
+        self.final_conv_acts = {"graph_1": None, "graph_2": None}
+        self.final_conv_acts_1 = None
+        self.final_conv_acts_2 = None
+        self.final_conv_grads_1 = None
+        self.final_conv_grads_2 = None
             
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
@@ -121,7 +127,9 @@ class HeteroGNN(torch.nn.Module):
     def forward(self, x_dict, edge_index_dict, batch_dict, slice_dict, training = False):
 
 
-        x_dict = self.forward_core(x_dict, edge_index_dict)
+        x_dict = self.forward_core(x_dict, edge_index_dict,training = training)
+
+
 
         # for each node type, aggregate over all nodes of that type
         #if batch_dict is not None:
@@ -130,13 +138,6 @@ class HeteroGNN(torch.nn.Module):
             rep = self.aggregation_mode(x_dict[key], batch_dict[key])
             type_specific_representations.append(rep)
 
-        #else:
-        #    type_specific_representations = []
-        #    for key, x in x_dict.items():
-        #        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        #        rep = self.aggregation_mode(x_dict[key], torch.zeros(x.shape[0], dtype= torch.int64).to(device))
-        #        type_specific_representations.append(rep)
-
 
         #x = F.dropout(torch.cat(type_specific_representations, dim=1), p=self.dropout, training = training)
         # concatenate the representations of the different node types
@@ -144,24 +145,22 @@ class HeteroGNN(torch.nn.Module):
         # add the hetero edges (num_edges["graph_1", "to", "graph_2"] as features
         
         #start from second key
-        node_keys = list(x_dict.keys())
-        edge_keys = list(edge_index_dict.keys())[:-1]
+        #node_keys = list(x_dict.keys())
+        #edge_keys = list(edge_index_dict.keys())[:-1]
+#
+        #graph_level_feature_len = len(node_keys)+len(edge_keys)
+        #graph_level_features = torch.zeros((x.shape[0],graph_level_feature_len)).to(self.device)
+#
+        ## these features should be scaled 
+        #idx = 0
+        #for key in node_keys:
+        #    graph_level_features[:,idx] = torch.diff(slice_dict[key]["x"], dim=0)/10000
+        #    idx +=1
+        #for key in edge_keys:
+        #    graph_level_features[:,idx] = torch.diff(slice_dict[key]["edge_index"], dim=0)/10000
+        #    idx +=1
 
-        graph_level_feature_len = len(node_keys)+len(edge_keys)
-        graph_level_features = torch.zeros((x.shape[0],graph_level_feature_len)).to(self.device)
-
-        # these features should be scaled 
-        idx = 0
-        for key in node_keys:
-            graph_level_features[:,idx] = torch.diff(slice_dict[key]["x"], dim=0)
-            idx +=1
-        for key in edge_keys:
-            graph_level_features[:,idx] = torch.diff(slice_dict[key]["edge_index"], dim=0)
-            idx +=1
-
-        x = torch.cat((x, graph_level_features), dim=1)        
-
-
+        #x = torch.cat((x, graph_level_features), dim=1)        
         x = F.dropout(x, p=self.dropout, training = training)
 
 
@@ -169,7 +168,7 @@ class HeteroGNN(torch.nn.Module):
 
 
         
-    def forward_core(self, x_dict, edge_index_dict):
+    def forward_core(self, x_dict, edge_index_dict, training):
         # linear layer batchnorm and relu
         for node_type, x in x_dict.items():
             x_dict[node_type] = self.batch_norm_dict_pre_conv[node_type](self.pre_lin_dict[node_type](x)).relu_()
@@ -184,12 +183,38 @@ class HeteroGNN(torch.nn.Module):
             x_dict = {key: x.relu() for key, x in x_dict.items()}
 
         # linear layer batchnorm and relu
+        #with torch.enable_grad():
+            #self.final_conv_acts_1 = self.batch_norm_dict_post_conv["graph_1"](self.post_lin_dict["graph_1"](x)).relu_().to(self.device)
+            #self.final_conv_acts_2 = self.batch_norm_dict_post_conv["graph_2"](self.post_lin_dict["graph_2"](x)).relu_().to(self.device)
         for node_type, x in x_dict.items():
-            x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x)).relu_()
+            self.final_conv_acts[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x)).relu_()
+    
+        self.final_conv_acts_1 = self.final_conv_acts["graph_1"]
+        self.final_conv_acts_2 = self.final_conv_acts["graph_2"]
 
-        return x_dict
+        if training:
 
-    @torch.no_grad()
+            # register hooks for the gradients
+            self.final_conv_acts_1.register_hook(self.activations_hook_1)
+            self.final_conv_acts_2.register_hook(self.activations_hook_2)
+        
+
+        #pass_dict = {"graph_1" : self.final_conv_acts_1, "graph_2" : self.final_conv_acts_2}
+        #print(pass_dict)
+        #print(self.final_conv_acts)
+
+        return self.final_conv_acts #pass_dict# {"graph_1" : self.final_conv_acts_1, "graph_2" : self.final_conv_acts_2}
+    
+
+    def activations_hook_1(self, grad):
+        self.final_conv_grads_1 = grad
+
+
+    def activations_hook_2(self, grad):
+        self.final_conv_grads_2 = grad
+
+
+"""    @torch.no_grad()
     def vals_without_aggregation(self, x_dict, edge_index_dict):
 
 
@@ -231,4 +256,5 @@ class HeteroGNN(torch.nn.Module):
 
             x_dict[node_type] = Lin(x)
 
-        return x_dict
+        return x_dict"""
+    
