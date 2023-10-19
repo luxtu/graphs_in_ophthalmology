@@ -67,6 +67,14 @@ def hetero_graph_imputation(dataset):
                 inf_pos = torch.where(torch.isinf(val))
                 val[inf_pos] = 0
 
+#def heter_graph_global_node_norm_param(dataset):
+#    import torch
+#
+#    for data in dataset:
+#        res = torch.cat([data["global"].x, res]) if res is not None else data["global"].x
+#
+#    return torch.mean(res, dim=0), torch.std(res, dim=0)
+
 
 def hetero_graph_normalization_params(train_dataset):
 
@@ -90,5 +98,41 @@ def hetero_graph_normalization_params(train_dataset):
 def hetero_graph_normalization(dataset, node_mean_tensors, node_std_tensors):
 
     for data in dataset:
-        for key, val in data.x_dict.items():
-            data.x_dict[key] = (val - node_mean_tensors[key]) / node_std_tensors[key]
+        for key in data.x_dict.keys():
+            data.x_dict[key] -=  node_mean_tensors[key]
+            data.x_dict[key] /= node_std_tensors[key]
+
+
+# combined feature dict
+
+def create_combined_feature_dict(g_feature_dict, faz_feature_dict, seg_feature_dict, dataset):
+    import numpy as np
+    comb_feature_dict = {}
+    for key, val in g_feature_dict.items():
+        comb_feature_dict[key] = (np.concatenate([val["graph_1"],val["graph_2"], np.array(faz_feature_dict[key]), seg_feature_dict[key]], axis = 0), int(dataset.hetero_graphs[key].y[0]))
+    return comb_feature_dict
+
+
+
+def add_global_node(dataset):
+    import torch
+    for data in dataset:
+        global_features = []
+        for node_type in data.x_dict.keys():
+            node_num = data.x_dict[node_type].shape[0]
+            edge_num = data.edge_index_dict[(node_type, "to", node_type)].shape[1]
+            avg_deg = 2*edge_num/node_num
+            global_features += [node_num, edge_num, avg_deg]
+
+            edges = torch.zeros((2, node_num))
+            edges[0,:] = 0
+            edges[1,:] = torch.arange(node_num)
+            edges = edges.long()
+            data[("global", "to", node_type)].edge_index = edges
+
+
+        heter_edge_num = data.edge_index_dict[("graph_1", "to", "graph_2")].shape[1]
+        global_features += [heter_edge_num, data.eye]
+        global_features = torch.tensor(global_features).unsqueeze(0)
+        data["global"].x = global_features
+        data[("global", "to", "global")].edge_index = torch.zeros((2,1)).long()
