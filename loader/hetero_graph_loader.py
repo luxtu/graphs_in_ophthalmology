@@ -270,14 +270,16 @@ class HeteroGraphLoaderTorch:
                 graph_2 = g2[key]
             except KeyError:
                 continue
+
+            eye = True if "_OD" in key else False
             # create the hetero graph
-            het_graph = self.create_hetero_graph(graph_1, graph_2, het_edge_index)
+            het_graph = self.create_hetero_graph(graph_1, graph_2, het_edge_index, eye)
             het_graph_dict[key] = het_graph
 
 
         return het_graph_dict
 
-    def create_hetero_graph(self, graph_1, graph_2, het_edge_index):
+    def create_hetero_graph(self, graph_1, graph_2, het_edge_index, eye):
             
             # create the hetero graph
             het_graph = HeteroData()
@@ -291,6 +293,8 @@ class HeteroGraphLoaderTorch:
             het_graph['graph_1', 'to', 'graph_1'].edge_index = graph_1.edge_index
             het_graph['graph_2', 'to', 'graph_2'].edge_index = graph_2.edge_index
             het_graph['graph_1', 'to', 'graph_2'].edge_index = het_edge_index
+
+            het_graph.eye = eye
 
             try:
                 het_graph.y = graph_1.y
