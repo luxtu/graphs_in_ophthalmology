@@ -39,6 +39,9 @@ class GraphFeatureExtractor():
 
     def extract_features_from_hetero_graph(self, hetero_graph):
         node_type_dict = {}
+
+        keys = list(hetero_graph.x_dict.keys())
+
         for key, val in hetero_graph.x_dict.items():
             # mean, max, min or add all features
             res = self.mode(val, dim=0)
@@ -46,12 +49,15 @@ class GraphFeatureExtractor():
             node_num = val.shape[0]
             edge_num = hetero_graph.edge_index_dict[(key, 'to', key)].shape[1]
             avg_degree = 2*edge_num / node_num
-            
 
-            res = torch.cat((res, torch.tensor([node_num, edge_num, avg_degree])), dim=0)
+            if len(keys) == 2:
+                hetero_edge_num = hetero_graph.edge_index_dict[(keys[0], 'to', keys[1])].shape[1]
+                res = torch.cat((res, torch.tensor([node_num, edge_num, avg_degree, hetero_edge_num])), dim=0)
+            else:
+                res = torch.cat((res, torch.tensor([node_num, edge_num, avg_degree])), dim=0)
+
 
             node_type_dict[key] = res
-            
         return node_type_dict
     
 
