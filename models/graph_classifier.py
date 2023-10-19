@@ -21,6 +21,7 @@ class graphClassifierClassic():
         cum_loss = 0
         size_data_set = len(self.train_loader.dataset) # must be done before iterating/regenerating the dataset
         for data in self.train_loader:
+
             
             out = self.model(data.x.float(), data.edge_index, data.batch, training = True)  # Perform a single forward pass.
             #print(out.shape)
@@ -30,9 +31,8 @@ class graphClassifierClassic():
             self.optimizer.step()  # Update parameters based on gradients.
             self.optimizer.zero_grad()  # Clear gradients.
             cum_loss += loss.item()
-        return cum_loss/size_data_set
 
-        
+        return cum_loss/size_data_set
 
 
     @torch.no_grad()
@@ -60,24 +60,25 @@ class graphClassifierClassic():
 
 
 class graphClassifierHetero():
-    def __init__(self, model, train_loader, test_loader, loss_func, lr = 0.005, weight_decay = 5e-5):
+    def __init__(self, model, loss_func, lr = 0.005, weight_decay = 5e-5):
 
         self.model = model
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model.to(self.device)
         self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr, weight_decay= weight_decay)
         self.lossFunc = loss_func
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.train_loader = train_loader
-        self.test_loader = test_loader
-
-        self.model.to(self.device)
 
 
-    def train(self):
+
+
+
+    def train(self, loader):
         self.model.train()
         cum_loss = 0
-        size_data_set = len(self.train_loader.dataset) # must be done before iterating/regenerating the dataset
-        for data in self.train_loader:
-            
+        size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
+        for data in loader:
+            data.to(self.device)
+            #print(torch.cuda.memory_allocated()/1024/1024/1024)
             out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True)  # Perform a single forward pass.
             #print(out.shape)
             #print(data.y.shape)
@@ -95,6 +96,7 @@ class graphClassifierHetero():
         correct = 0
         size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
         for data in loader:  # Iterate in batches over the training/test dataset.
+            data.to(self.device)
             out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = False)  
             pred = out.argmax(dim=1)  # Use the class with highest probability.
             correct += int((pred == data.y).sum())  # Check against ground-truth labels.
@@ -106,6 +108,7 @@ class graphClassifierHetero():
         outList = []
         yList = []
         for data in loader:  # Iterate in batches over the training/test dataset.
+            data.to(self.device)
             out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = False)  
             outList.append(out.cpu())
             yList.append(data.y.cpu())
