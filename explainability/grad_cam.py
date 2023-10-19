@@ -9,7 +9,7 @@ def max_cam_data(model, data, target_class, scale = False):
     Assigns a 1 to all the nodes that participated in the prediction of the target class and a 0 to the rest.
     """
     model.eval()
-    output = model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True)
+    output = model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True, grads = True)
 
     if type(target_class) == int:
         target_class = [target_class] 
@@ -48,10 +48,10 @@ def max_cam_heat_map(model):
 
     return node_heat_map
 
-def grad_cam_data(model, data, target_class, scale = False):
+def grad_cam_data(model, data, target_class, scale = False, relu = False):
     # Perform forward pass for the target class
     model.eval()
-    output = model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True)
+    output = model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True, grads = True)
 
     if type(target_class) == int:
         target_class = [target_class] 
@@ -61,7 +61,7 @@ def grad_cam_data(model, data, target_class, scale = False):
     for c in target_class:
         output[:, c].backward(retain_graph=True)
         # Compute Grad-CAM
-        node_heat_map = grad_cam_heat_map(model)
+        node_heat_map = grad_cam_heat_map(model, relu = relu)
         heat_maps.append(node_heat_map)
 
     if scale:
@@ -94,18 +94,23 @@ def grad_cam_data(model, data, target_class, scale = False):
         return heat_maps
 
 
-def grad_cam_heat_map(model):
+def grad_cam_heat_map(model, relu = False):
     # Compute Grad-CAM
     alphas_1 = torch.mean(model.final_conv_grads_1, axis=0)
     alphas_2 = torch.mean(model.final_conv_grads_2, axis=0)
     node_heat_map_1 = []
     for n in range(model.final_conv_acts_1.shape[0]):
-        node_heat = F.relu(alphas_1 @ model.final_conv_acts_1[n])#).item() F.relu(
+        node_heat = alphas_1 @ model.final_conv_acts_1[n]#).item() F.relu(
+        if relu:
+            node_heat = F.relu(node_heat)
         node_heat_map_1.append(node_heat.item())
 
     node_heat_map_2 = []
     for n in range(model.final_conv_acts_2.shape[0]):
-        node_heat = F.relu(alphas_2 @ model.final_conv_acts_2[n])#).item() F.relu(
+        node_heat = alphas_2 @ model.final_conv_acts_2[n]#).item() F.relu(
+        if relu:
+            node_heat = F.relu(node_heat)
+
         node_heat_map_2.append(node_heat.item())
 
     node_heat_map = {}
