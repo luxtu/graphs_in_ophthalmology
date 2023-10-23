@@ -49,6 +49,7 @@ def roc_auc_multiclass(groundtruth, predicted):
     cls_int = np.arange(predicted.shape[1])
     y = label_binarize(groundtruth, classes=cls_int)
 
+    
     # Compute ROC curve and ROC area for each class
     fpr = dict()
     tpr = dict()
@@ -76,15 +77,28 @@ def plot_roc_curve(groundtruth, predicted, class_labels=None):
     - None (displays the plot)
     """
 
-    fpr, tpr, roc_auc = roc_auc_multiclass(groundtruth, predicted)
-
-    # Plot ROC curves
     plt.figure(figsize=(8, 6))
-    colors = cycle(['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan'])
+    if len(class_labels)==2:
+        y = label_binarize(groundtruth, classes= np.arange(predicted.shape[1]))
+        fpr, tpr, _ = roc_curve(y, predicted[:,1])
 
-    for i, color in zip(range(len(class_labels)), colors):
-        plt.plot(fpr[i], tpr[i], color=color, lw=2,
-                 label=f'ROC curve (class {class_labels[i]}) (AUC = {roc_auc[i]:.2f})')
+        roc_auc = auc(fpr, tpr)
+
+        plt.plot(fpr, tpr, color='darkorange', lw=2,
+                 label=f'ROC curve {class_labels[0]} vs {class_labels[1]}(AUC = {roc_auc:.2f})')
+
+    else:
+        fpr, tpr, roc_auc = roc_auc_multiclass(groundtruth, predicted)
+
+
+
+        # Plot ROC curves
+        
+        colors = cycle(['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan'])
+
+        for i, color in zip(range(len(class_labels)), colors):
+            plt.plot(fpr[i], tpr[i], color=color, lw=2,
+                     label=f'ROC curve (class {class_labels[i]}) (AUC = {roc_auc[i]:.2f})')
 
     plt.plot([0, 1], [0, 1], 'k--', lw=2)
     plt.xlim([0.0, 1.0])
