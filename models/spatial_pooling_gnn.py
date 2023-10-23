@@ -30,8 +30,9 @@ class GeomPool_GNN(torch.nn.Module):
                                                          aggregation_mode= None, 
                                                          node_types = node_types)
         
-        self.lin1 = Linear(-1, hidden_channels)
-        self.lin2 = Linear(hidden_channels, out_channels)
+        self.lin1 = Linear(-1, hidden_channels*2)
+        self.lin2 = Linear(hidden_channels*2, hidden_channels)
+        self.lin3 = Linear(hidden_channels, out_channels)
         
         
 
@@ -48,7 +49,7 @@ class GeomPool_GNN(torch.nn.Module):
 
             # get the node positions
             node_positions = pos_dict[key]
-
+            # adjust position to -600 to 600 for both x and y axis
             node_positions -= 600
 
             signed_distances_diagonal = node_positions[:, 1] - node_positions[:, 0]
@@ -58,13 +59,14 @@ class GeomPool_GNN(torch.nn.Module):
             labels[signed_distances_diagonal > 0] += 1
             labels[signed_distances_normal_diagonal < 0] += 2
             # make the radius learnable
-            circ_rad = 200
-            labels[torch.linalg.norm(node_positions, axis=1) < circ_rad] = 4
+            # maybe change to 120
+            #circ_rad = 100
+            #labels[torch.linalg.norm(node_positions, axis=1) < circ_rad] = 4
 
             # assign to class 0 or 1 by slicing a diagonal through the image
             # diagonal is from top left to bottom right
 
-            for i in range(5):
+            for i in range(4):
                 rep = self.aggregation_mode(x_dict[key][labels==i], batch_dict[key][labels ==i])
                 representation_concat.append(rep)
              
@@ -72,7 +74,7 @@ class GeomPool_GNN(torch.nn.Module):
         x = torch.cat(representation_concat, dim=1)  
         x = F.dropout(x, p=self.dropout, training = training)
 
-        return self.lin2(self.lin1(x).relu())
+        return self.lin3(self.lin2(self.lin1(x).relu()).relu())
 
 
         
