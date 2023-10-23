@@ -136,3 +136,48 @@ def add_global_node(dataset):
         global_features = torch.tensor(global_features).unsqueeze(0)
         data["global"].x = global_features
         data[("global", "to", "global")].edge_index = torch.zeros((2,1)).long()
+
+
+def add_node_features(dataset, node_types):
+    import torch
+    
+    for data in dataset:
+        if len(node_types) == 2:
+            heter_node_degrees_1, heter_node_degrees_2 = calculate_node_degrees(data.edge_index_dict[(node_types[0], "to", node_types[1])], data.x_dict[node_types[0]].shape[0], data.x_dict[node_types[1]].shape[0])
+            heter_node_degrees_1 = heter_node_degrees_1.unsqueeze(1).float()
+            heter_node_degrees_2 = heter_node_degrees_2.unsqueeze(1).float()
+
+        for i, key in enumerate(node_types):
+
+            node_degrees = calculate_node_degrees(data.edge_index_dict[(key, "to", key)], data.x_dict[key].shape[0])
+            node_degrees = node_degrees.unsqueeze(1).float()
+
+            if len(node_types) == 2:
+
+                if i == 0:
+                    data[key].x = torch.cat((data.x_dict[key], node_degrees, heter_node_degrees_1), dim=1)
+                else:
+                    data[key].x = torch.cat((data.x_dict[key], node_degrees, heter_node_degrees_2), dim=1)
+            else:
+                data[key].x = torch.cat((data.x_dict[key], node_degrees), dim=1)
+
+            
+    
+
+
+def calculate_node_degrees(edge_index, num_nodes, num_nodes_2=None):
+    import torch
+    # Ensure that edge_index is a 2D tensor with two rows
+    if edge_index.shape[0] != 2:
+        raise ValueError("edge_index should have two rows.")
+
+    if num_nodes_2 is not None:
+        degrees = torch.bincount(edge_index[0], minlength= num_nodes)
+        degrees_2 = torch.bincount(edge_index[1], minlength= num_nodes_2)
+
+        return degrees, degrees_2
+    else:
+        degrees = torch.bincount(edge_index[0], minlength= num_nodes)
+        degrees += torch.bincount(edge_index[1], minlength= num_nodes)
+
+        return degrees
