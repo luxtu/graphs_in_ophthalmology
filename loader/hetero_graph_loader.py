@@ -3,7 +3,7 @@ import re
 import pandas as pd
 import torch
 from torch_geometric.data import Data, HeteroData
-from torch_geometric.transforms import ToUndirected
+from torch_geometric.transforms import ToUndirected, RemoveIsolatedNodes
 from sklearn.model_selection import train_test_split
 
 class HeteroGraphLoaderTorch:
@@ -302,6 +302,7 @@ class HeteroGraphLoaderTorch:
                 pass
 
             het_graph = ToUndirected()(het_graph)
+            het_graph = RemoveIsolatedNodes()(het_graph)
     
             return het_graph
 
