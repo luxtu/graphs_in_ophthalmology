@@ -63,12 +63,12 @@ labels = "../labels.csv"
 
 
 train_dataset = image_loader.CNNImageLoader(path = images,
-                                         label_path = labels,
+                                         label_file = labels,
                                          transform=transform_train,
                                          mode = "train"
                                          )
 test_dataset = image_loader.CNNImageLoader(path = images,
-                                         label_path = labels,
+                                         label_file = labels,
                                          transform=transform_test,
                                          mode = "test"
                                          )
@@ -182,4 +182,4 @@ def main():
 # Save the fine-tuned model if needed
 #torch.save(resnet.state_dict(), 'fine_tuned_resnet18.pth')
 
-wandb.agent(sweep_id, function=main, count=1)
+wandb.agent(sweep_id, function=main, count=100)

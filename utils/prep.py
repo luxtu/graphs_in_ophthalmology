@@ -29,7 +29,7 @@ def get_class_weights(train_labels, verbose = False):
 
 def evaluate_cnn(model, dataloader):
     import torch
-    from sklearn.metrics import accuracy_score, balanced_accuracy_score
+    from sklearn.metrics import accuracy_score, balanced_accuracy_score, cohen_kappa_score
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.eval()
@@ -45,6 +45,10 @@ def evaluate_cnn(model, dataloader):
 
     accuracy = accuracy_score(all_labels, all_predictions)
     balanced_accuracy = balanced_accuracy_score(all_labels, all_predictions)
+    kappa = cohen_kappa_score(all_labels, all_predictions)
+
+    res_dict = {"accuracy": accuracy, "balanced_accuracy": balanced_accuracy, "kappa": kappa}
+
 
     del inputs, labels, outputs, predictions
     torch.cuda.empty_cache()

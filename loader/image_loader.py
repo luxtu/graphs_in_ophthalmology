@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 
 class CNNImageLoader():
 
-    octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 1, "Early NPDR": 2, "Late NPDR": 2}
+    octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 2, "Early NPDR": 1, "Late NPDR": 1}
 
     def __init__(self, path, label_file, mode, transform=None):
         self.path = path
@@ -19,6 +19,9 @@ class CNNImageLoader():
         self.transform = transform
 
 
+    def update_class(self, new_class_dict):
+
+        self.octa_dr_dict = new_class_dict
 
 
 
@@ -58,12 +61,16 @@ class CNNImageLoader():
         test, val = train_test_split(temp, test_size=0.5, random_state=42, stratify=temp["Group"])
         del temp
 
+        _, debug = train_test_split(test, test_size=0.10, random_state=42, stratify=test["Group"])
+
         if self.mode == "train":
             label_data = train            
         elif self.mode == "test":
             label_data = test
         elif self.mode == "val":
             label_data = val
+        elif self.mode == "debug":
+            label_data = debug
 
         label_dict = {}
 

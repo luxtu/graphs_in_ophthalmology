@@ -4,6 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH -o cnn_test.out
 #SBATCH -e cnn_test.err
+#SBATCH -q mcml
 
 
 # Set your API key (replace 'YOUR_API_KEY' with your actual API key)

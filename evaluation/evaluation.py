@@ -11,6 +11,55 @@ from sklearn.manifold import TSNE
 from itertools import combinations
 
 
+
+def evaluate_cnn(model, dataloader, num_classes):
+    import torch
+    from sklearn.metrics import accuracy_score, balanced_accuracy_score, cohen_kappa_score
+    from sklearn.metrics import roc_auc_score
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.eval()
+    all_labels = []
+    all_predictions = []
+    all_outputs = []
+
+    for inputs, labels in dataloader:
+        inputs, labels = inputs.to(device), labels.to(device)
+        outputs = model(inputs)
+        _, predictions = torch.max(outputs, 1)
+        all_outputs.extend(outputs.detach().cpu().numpy())
+        all_labels.extend(labels.detach().cpu().numpy())
+        all_predictions.extend(predictions.detach().cpu().numpy())
+
+
+    accuracy = accuracy_score(all_labels, all_predictions)
+    balanced_accuracy = balanced_accuracy_score(all_labels, all_predictions)
+    kappa = cohen_kappa_score(all_labels, all_predictions)
+    labels_array = np.array(all_labels)
+    predictions_array = torch.nn.functional.softmax(torch.tensor(np.array(all_outputs).squeeze()), dim = 1).detach().cpu().numpy()
+
+
+    if num_classes == 2:
+        mean_auc = roc_auc_score(
+            y_true=labels_array,
+            y_score = predictions_array[:,1],
+            multi_class="ovr",
+            average="macro",
+        )
+    else:
+        mean_auc = roc_auc_score(
+            y_true=labels_array,
+            y_score = predictions_array,
+            multi_class="ovr",
+            average="macro",
+        )
+
+    #del inputs, labels, outputs, predictions
+    #torch.cuda.empty_cache()
+
+    return accuracy, balanced_accuracy, kappa, mean_auc
+
+
 def plot_confusion_matrix(groundTruth, predicted, label_list, ax):
     cf_mat = confusion_matrix(groundTruth, predicted)  
     ax.matshow(cf_mat)
