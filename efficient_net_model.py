@@ -22,7 +22,7 @@ args = argparser.parse_args()
 
 
 
-torch.cuda.empty_cache()
+#torch.cuda.empty_cache()
 
 
 # Define your data transformations (modify as needed)
