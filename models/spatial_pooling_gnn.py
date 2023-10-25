@@ -30,6 +30,14 @@ class GeomPool_GNN(torch.nn.Module):
                                                          aggregation_mode= None, 
                                                          node_types = node_types)
         
+        self.lin1_eye0 = Linear(-1, hidden_channels*2)
+        self.lin2_eye0 = Linear(hidden_channels*2, out_channels)
+        self.lin2_eye0_reg = Linear(hidden_channels*2, 1)
+
+        self.lin1_eye1 = Linear(-1, hidden_channels*2)
+        self.lin2_eye1 = Linear(hidden_channels*2, out_channels)
+        self.lin2_eye1_reg = Linear(hidden_channels*2, 1)
+
         self.lin1 = Linear(-1, hidden_channels*2)
         self.lin2 = Linear(hidden_channels*2, hidden_channels)
         self.lin3 = Linear(hidden_channels, out_channels)
@@ -37,8 +45,11 @@ class GeomPool_GNN(torch.nn.Module):
         
 
 
-    def forward(self, x_dict, edge_dict, batch_dict, slice_dict, training = False, grads = False, pos_dict = None):
+    def forward(self, x_dict, edge_dict, batch_dict, slice_dict, training = False, grads = False, pos_dict = None, regression = False ):
 
+        #last feature is the eye indicator, this
+        eye = x_dict["global"][:, -1]>0
+        #print(eye)
         x_dict = self.gnn1_embed.forward_core(x_dict, edge_dict, training=training,  grads=grads)
 
         # pool
@@ -72,9 +83,49 @@ class GeomPool_GNN(torch.nn.Module):
              
         representation_concat.append(self.aggregation_mode(x_dict["global"], batch_dict["global"]))
         x = torch.cat(representation_concat, dim=1)  
-        x = F.dropout(x, p=self.dropout, training = training)
+        #x = F.dropout(x, p=self.dropout, training = training)
 
-        return self.lin3(self.lin2(self.lin1(x).relu()).relu())
+        if regression == False:
+            ## apply linear layer fro each sample in the batch according to the eye
+            x_eye0 = self.lin1_eye0(x[eye == 0]).relu()
+            x_eye0 = F.dropout(x_eye0, p=self.dropout, training = training)
+            x_eye0 = self.lin2_eye0(x_eye0)
+#   
+            x_eye1 = self.lin1_eye1(x[eye == 1]).relu()
+            x_eye1 = F.dropout(x_eye1, p=self.dropout, training = training)
+            x_eye1 = self.lin2_eye1(x_eye1)
+#   
+            ## build batch vector again
+#   
+            x = torch.zeros((x.shape[0], x_eye0.shape[1]), device=self.device)
+
+            x[eye == 0] = x_eye0
+            x[eye == 1] = x_eye1
+            return x
+        
+        else:
+            ## apply linear layer fro each sample in the batch according to the eye
+            x_eye0 = self.lin1_eye0(x[eye == 0]).relu()
+            x_eye0 = F.dropout(x_eye0, p=self.dropout, training = training)
+            x_eye0 = self.lin2_eye0_reg(x_eye0)
+#   
+            x_eye1 = self.lin1_eye1(x[eye == 1]).relu()
+            x_eye1 = F.dropout(x_eye1, p=self.dropout, training = training)
+            x_eye1 = self.lin2_eye1_reg(x_eye1)
+#   
+            ## build batch vector again
+#   
+            x = torch.zeros((x.shape[0]), device=self.device)
+
+            x[eye == 0] = x_eye0[:, 0]
+            x[eye == 1] = x_eye1[:, 0]
+            return x
+                    
+
+        #return self.lin3(self.lin2(self.lin1(x).relu()).relu())
+
+
+        # try change from classification to regression
 
 
         
