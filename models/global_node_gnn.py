@@ -1,7 +1,7 @@
 import torch
 #from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, Linear, GATConv, EdgeConv
+from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, Linear, GATConv, EdgeConv, HeteroDictLinear
 
 
 class GNN_global_node(torch.nn.Module):
@@ -33,6 +33,8 @@ class GNN_global_node(torch.nn.Module):
 
         self.node_types = node_types    
         
+        self.cat_comps = torch.nn.ModuleList()
+
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HeteroConv({
@@ -43,11 +45,13 @@ class GNN_global_node(torch.nn.Module):
 
                 ('graph_1', 'to', 'graph_2'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False),
                 ('graph_2', 'rev_to', 'graph_1'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False),
-                ('global', 'to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False), #
+                ('global', 'to', 'graph_1'): GATConv((-1,-1), hidden_channels, add_self_loops=False), #
                 ('global', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False), #
-                ('global', 'to', 'global'): GCNConv(-1, hidden_channels), 
-            }, aggr='sum')
+                ('global', 'to', 'global'): GCNConv(-1,hidden_channels), 
+            }, aggr='cat')
             self.convs.append(conv)
+
+            self.cat_comps.append(HeteroDictLinear(-1, hidden_channels, types= node_types + ["global"]))
 
         # linear layers for skip connections
         self.skip_lin = torch.nn.ModuleList()
@@ -102,9 +106,15 @@ class GNN_global_node(torch.nn.Module):
             # apply the conv and then add the skip connections
             x_dict = conv(x_dict, edge_index_dict)
 
-            # apply the skip connections
-            for node_type in self.node_types:
-                x_dict[node_type] = x_dict[node_type] + self.skip_lin[i][node_type](x_dict[node_type])
+            # cat comp
+
+            x_dict = self.cat_comps[i](x_dict)
+
+
+
+            ## apply the skip connections
+            #for node_type in self.node_types:
+            #    x_dict[node_type] = x_dict[node_type] + self.skip_lin[i][node_type](x_dict[node_type])
 
         for node_type in self.node_types:
             x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x_dict[node_type]))
