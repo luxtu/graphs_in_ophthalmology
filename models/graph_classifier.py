@@ -3,7 +3,7 @@ import numpy as np
 from torch.optim.lr_scheduler import ExponentialLR
 
 class graphClassifierHetero():
-    def __init__(self, model, loss_func, lr = 0.005, weight_decay = 5e-5):
+    def __init__(self, model, loss_func, lr = 0.005, weight_decay = 5e-5, regression = False):
 
         self.model = model
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -12,6 +12,7 @@ class graphClassifierHetero():
         self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr, weight_decay= weight_decay)
         self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
         self.lossFunc = loss_func
+        self.regression = regression
 
     def train(self, loader):
         self.model.train()
@@ -24,7 +25,7 @@ class graphClassifierHetero():
             #print(data.y)
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
-            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True, pos_dict = pos_dict)  # Perform a single forward pass.
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True, pos_dict = pos_dict, regression =self.regression)  # Perform a single forward pass.
             #print(out.shape)
             #print(data.y.shape)
             loss = self.lossFunc(out, data.y)  # Compute the loss solely based on the training nodes.
@@ -46,8 +47,20 @@ class graphClassifierHetero():
             pos_dict = {}
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
-            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = False, pos_dict = pos_dict)  
-            pred = out.argmax(dim=1)  # Use the class with highest probability.
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = False, pos_dict = pos_dict, regression =self.regression) 
+
+            if self.regression:
+                # assign classes according to thresholds
+                out = out.squeeze()
+                out[out<0.5] = 0
+                out[(out>=0.5) & (out<1.5)] = 1
+                out[out>=1.5] = 2 # ) & (out<2.5)
+
+                # convert to int
+                pred = out.int()
+
+            else: 
+                pred = out.argmax(dim=1)  # Use the class with highest probability. 
             correct += int((pred == data.y).sum())  # Check against ground-truth labels.
         return correct / size_data_set  # Derive ratio of correct predictions.
 
@@ -61,7 +74,15 @@ class graphClassifierHetero():
             pos_dict = {}
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
-            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = False, pos_dict = pos_dict)  
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = False, pos_dict = pos_dict, regression =self.regression)  
+            if self.regression:
+                # assign classes according to thresholds
+                #out = out.squeeze()
+                out[out<0.5] = 0
+                out[(out>=0.5) & (out<1.5)] = 1
+                out[out>=1.5] = 2
+                out = out.int()
+
             outList.append(out.cpu())
             yList.append(data.y.cpu())
         return outList, yList 
