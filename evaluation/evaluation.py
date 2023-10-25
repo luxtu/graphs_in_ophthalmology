@@ -34,7 +34,7 @@ def evaluate_cnn(model, dataloader, num_classes):
 
     accuracy = accuracy_score(all_labels, all_predictions)
     balanced_accuracy = balanced_accuracy_score(all_labels, all_predictions)
-    kappa = cohen_kappa_score(all_labels, all_predictions)
+    kappa = cohen_kappa_score(all_labels, all_predictions, weights="quadratic")
     labels_array = np.array(all_labels)
     predictions_array = torch.nn.functional.softmax(torch.tensor(np.array(all_outputs).squeeze()), dim = 1).detach().cpu().numpy()
 

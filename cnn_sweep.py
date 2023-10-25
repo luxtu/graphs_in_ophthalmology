@@ -89,6 +89,15 @@ train_dataset.update_class({"Healthy": 0, "DM": 0, "PDR": 2, "Early NPDR": 1, "L
 test_dataset.update_class({"Healthy": 0, "DM": 0, "PDR": 2, "Early NPDR": 1, "Late NPDR": 1})
 
 
+def xavier_init(model):
+    if isinstance(model, nn.Module):
+        if isinstance(model, (nn.Conv2d, nn.Linear)):
+            nn.init.xavier_uniform_(model.weight)
+            if model.bias is not None:
+                nn.init.constant_(model.bias, 0)
+
+
+
 def main():
     run = wandb.init()
 
@@ -96,11 +105,13 @@ def main():
     if wandb.config.model == "resnet":
         # Load the pre-trained ResNet18 model
         #weights = ResNet18_Weights.DEFAULT
-        model = resnet18()#weights=weights)
+        model = resnet18() #weights=weights)
+        model.apply(xavier_init)
 
     elif wandb.config.model == "effnet":
         #weights = EfficientNet_B3_Weights.DEFAULT
-        model = efficientnet_b3()#weights=weights)
+        model = efficientnet_b3() #weights=weights)
+        model.apply(xavier_init)
 
     ## Train all layers
     for param in model.parameters():
