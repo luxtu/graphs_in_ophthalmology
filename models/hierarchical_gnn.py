@@ -9,7 +9,7 @@ from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_poo
 from torch_geometric.utils import to_dense_adj
 
 class DiffPool_GNN(torch.nn.Module):
-    def __init__(self, hidden_channels, out_channels, num_layers, dropout, node_types, max_nodes):
+    def __init__(self, hidden_channels, out_channels, num_layers, dropout, node_types, max_nodes, **kwargs):
         super().__init__()
         torch.manual_seed(1234567)
 
@@ -66,7 +66,7 @@ class DiffPool_GNN(torch.nn.Module):
         self.gnn_2_embed.to(self.device)
         self.gnn_3_embed_cls.to(self.device)
 
-    def forward(self, x_dict, edge_dict, batch_dict, slice_dict, training = False, grads = False):
+    def forward(self, x_dict, edge_dict, batch_dict, slice_dict, training = False, grads = False, **kwargs):
         
         s_dict = self.gnn1_pool.forward_core(x_dict, edge_dict, training=training,  grads=grads)
         x_dict = self.gnn1_embed.forward_core(x_dict, edge_dict, training= training, grads=grads)

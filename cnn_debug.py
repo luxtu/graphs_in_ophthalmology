@@ -15,6 +15,8 @@ from utils import prep
 from types import SimpleNamespace
 import wandb
 
+print("start")
+
 # Define sweep config
 sweep_config_dict = {
         "model" : "effnet",
@@ -52,10 +54,10 @@ transform_train = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-images = "/media/data/alex_johannes/octa_data/Cairo/DCP_images"
-#images = "../dcp_images"
-labels = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
-#labels = "../labels.csv"
+#images = "/media/data/alex_johannes/octa_data/Cairo/DCP_images"
+images = "../dcp_images"
+#labels = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
+labels = "../labels.csv"
 
 
 train_dataset = image_loader.CNNImageLoader(path = images,
@@ -111,14 +113,15 @@ def main():
     elif sweep_config.model == "effnet":
         #weights = EfficientNet_B2_Weights.DEFAULT
         #model = efficientnet_b2(weights=weights)
+
         def get_state_dict(self, *args, **kwargs):
-            #kwargs.pop("check_hash")
+            print(kwargs)
+            kwargs.pop("check_hash")
             return load_state_dict_from_url(self.url, *args, **kwargs)
-        
         WeightsEnum.get_state_dict = get_state_dict
-        #model = efficientnet_b2(weights=EfficientNet_B2_Weights.IMAGENET1K_V1)
-        model = efficientnet_b2(weights="DEFAULT")
-        #model.apply(xavier_init)
+
+        #model = efficientnet_b0(weights=EfficientNet_B0_Weights.IMAGENET1K_V1)
+        model = efficientnet_b0(weights="DEFAULT")
 
     ## Train all layers
     for param in model.parameters():

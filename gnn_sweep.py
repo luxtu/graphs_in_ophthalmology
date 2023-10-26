@@ -32,7 +32,7 @@ sweep_configuration = {
         "aggregation_mode": {"values": ["global_mean_pool", "global_add_pool"]},#, "global_mean_pool",  "global_add_pool" # add pool does not work
         "class_weights": {"values": ["unbalanced", "balanced"]}, # "balanced", 
         "dataset": {"values": ["DCP"]}, #, "DCP"
-        "regression": {"values": [True, False]},
+        "regression": {"values": [False]},
     },
 }
 
@@ -44,10 +44,16 @@ data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
 octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 2, "Early NPDR": 1, "Late NPDR": 1}
 label_names = ["Healthy/DM", "NPDR", "PDR"]
 
-vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
-void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
-hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
-label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
+#vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
+#void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
+#hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
+#label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
+
+vessel_graph_path = f"../{data_type}_vessel_graph"
+void_graph_path = f"../{data_type}_void_graph"
+hetero_edges_path = f"../{data_type}_heter_edges"
+label_file = "../labels.csv"
+
 
 
 train_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(vessel_graph_path,
@@ -84,8 +90,8 @@ node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(tra
 #torch.save(node_std_tensors, f"checkpoints/{data_type}_node_std_tensors_global_node_node_degs.pt")
 
 #node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(train_dataset)
-node_mean_tensors = torch.load(f"checkpoints/{data_type}_node_mean_tensors_global_node_node_degs.pt")
-node_std_tensors = torch.load(f"checkpoints/{data_type}_node_std_tensors_global_node_node_degs.pt")
+node_mean_tensors = torch.load(f"../{data_type}_node_mean_tensors_global_node_node_degs.pt")
+node_std_tensors = torch.load(f"../{data_type}_node_std_tensors_global_node_node_degs.pt")
 
 prep.hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
 prep.hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)

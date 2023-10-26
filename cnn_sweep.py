@@ -36,7 +36,7 @@ sweep_configuration = {
 
 
 sweep_id = wandb.sweep(sweep=sweep_configuration, project="graph_pathology")
-#torch.cuda.empty_cache()
+
 
 
 # Define your data transformations (modify as needed)
@@ -79,7 +79,7 @@ test_dataset = image_loader.CNNImageLoader(path = images,
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 train_labels = [label for _, label in train_dataset]
-class_weights = prep.get_class_weights(train_labels, verbose = True)
+class_weights = prep.get_class_weights(train_labels, verbose = False)
 class_weights = torch.tensor(class_weights, device=device)
 class_weights = class_weights ** 0.5 
 
@@ -116,7 +116,7 @@ def main():
         #weights = EfficientNet_B3_Weights.DEFAULT
 
         def get_state_dict(self, *args, **kwargs):
-            #kwargs.pop("check_hash")
+            kwargs.pop("check_hash")
             return load_state_dict_from_url(self.url, *args, **kwargs)
         
         WeightsEnum.get_state_dict = get_state_dict

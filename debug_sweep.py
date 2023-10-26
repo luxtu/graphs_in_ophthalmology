@@ -12,12 +12,6 @@ from utils import prep
 from evaluation import evaluation
 from types import SimpleNamespace
 
-torch.cuda.empty_cache()
-
-# Create a SimpleNamespace object from a dictionary
-my_dict = {'key1': 42, 'key2': 'value', 'key3': [1, 2, 3]}
-my_obj = SimpleNamespace(**my_dict)
-
 
 # Define sweep config
 sweep_config_dict = {
@@ -40,10 +34,15 @@ data_type = sweep_config.dataset
 octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 2, "Early NPDR": 1, "Late NPDR": 1}
 label_names = ["Healthy/DM", "PDR", "NPDR"]
 
-vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
-void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
-hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
-label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
+#vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
+#void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
+#hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
+#label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
+
+vessel_graph_path = f"../{data_type}_vessel_graph"
+void_graph_path = f"../{data_type}_void_graph"
+hetero_edges_path = f"../{data_type}_heter_edges"
+label_file = "../labels.csv"
 
 
 train_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(vessel_graph_path,
@@ -75,8 +74,8 @@ prep.add_global_node(test_dataset)
 
 
 #node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(train_dataset)
-node_mean_tensors = torch.load(f"checkpoints/{data_type}_node_mean_tensors_global_node_node_degs.pt")
-node_std_tensors = torch.load(f"checkpoints/{data_type}_node_std_tensors_global_node_node_degs.pt")
+node_mean_tensors = torch.load(f"../{data_type}_node_mean_tensors_global_node_node_degs.pt")
+node_std_tensors = torch.load(f"../{data_type}_node_std_tensors_global_node_node_degs.pt")
 
 prep.hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
 prep.hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)
@@ -131,12 +130,11 @@ def main():
     # weigthings for imbalanced classes 
     balanced_loss = torch.nn.CrossEntropyLoss(class_weights)
     unbalanced_loss = torch.nn.CrossEntropyLoss()
-
     reg_loss = torch.nn.SmoothL1Loss()
 
     loss_dict = {"balanced": balanced_loss, "unbalanced": unbalanced_loss}
 
-    classifier = graph_classifier.graphClassifierHetero(model,reg_loss , lr = sweep_config.lr, weight_decay =sweep_config.weight_decay, regression=True) #loss_dict[sweep_config.class_weights]
+    classifier = graph_classifier.graphClassifierHetero(model,unbalanced_loss , lr = sweep_config.lr, weight_decay =sweep_config.weight_decay, regression=False) #loss_dict[sweep_config.class_weights]
 
     best_val_bal_acc = 0
     best_mean_auc = 0
@@ -147,7 +145,7 @@ def main():
 
         outList, yList = classifier.predict(test_loader)
 
-        reg = True
+        reg = False
         if not reg:
             y_p = np.array([item.argmax().cpu().detach().numpy() for sublist in outList for item in sublist])
         else:

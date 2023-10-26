@@ -1,7 +1,7 @@
 import torch
 #from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, Linear, GATConv, EdgeConv, HeteroDictLinear
+from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, HeteroLinear,Linear, GATConv, EdgeConv, HeteroDictLinear
 
 
 class GNN_global_node(torch.nn.Module):
@@ -38,20 +38,17 @@ class GNN_global_node(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HeteroConv({
-                ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels),
-                ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
-                # results in "gradient computation has been modified by an inplace operation"
-                # try changing 
-
-                ('graph_1', 'to', 'graph_2'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False),
-                ('graph_2', 'rev_to', 'graph_1'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False),
-                ('global', 'to', 'graph_1'): GATConv((-1,-1), hidden_channels, add_self_loops=False), #
-                ('global', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False), #
-                ('global', 'to', 'global'): GCNConv(-1,hidden_channels), 
+                ('graph_1', 'to', 'graph_1'): SAGEConv(-1, hidden_channels, aggr = ["mean", "std"]),
+                ('graph_2', 'to', 'graph_2'): SAGEConv(-1, hidden_channels, aggr =["mean", "std"]),
+                ('graph_1', 'to', 'graph_2'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False, aggr = ["mean", "std"]),
+                ('graph_2', 'rev_to', 'graph_1'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False, aggr = ["mean", "std"]),
+                ('global', 'to', 'graph_1'): SAGEConv((-1,-1), hidden_channels, add_self_loops=False), #
+                ('global', 'to', 'graph_2'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False), #
+                ('global', 'to', 'global'): SAGEConv(-1,hidden_channels), 
             }, aggr='cat')
             self.convs.append(conv)
-
             self.cat_comps.append(HeteroDictLinear(-1, hidden_channels, types= node_types + ["global"]))
+
 
         # linear layers for skip connections
         self.skip_lin = torch.nn.ModuleList()
@@ -80,7 +77,6 @@ class GNN_global_node(torch.nn.Module):
 
         x_dict = self.forward_core(x_dict, edge_index_dict,training = training, grads = grads)
 
-
         # for each node type, aggregate over all nodes of that type
         type_specific_representations = []
         for key, x in x_dict.items():
@@ -105,7 +101,7 @@ class GNN_global_node(torch.nn.Module):
         for i, conv in enumerate(self.convs):
             # apply the conv and then add the skip connections
             x_dict = conv(x_dict, edge_index_dict)
-
+            x_dict = {key: x.relu() for key, x in x_dict.items()}
             # cat comp
 
             x_dict = self.cat_comps[i](x_dict)
@@ -122,8 +118,7 @@ class GNN_global_node(torch.nn.Module):
         self.final_conv_acts_1 = x_dict["graph_1"]
         self.final_conv_acts_2 = x_dict["graph_2"]
 
-        for node_type in self.node_types:
-            x_dict[node_type] = x_dict[node_type].relu()
+        x_dict = {key: x.relu() for key, x in x_dict.items()}
             
         if grads:
             # register hooks for the gradients
