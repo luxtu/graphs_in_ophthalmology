@@ -9,7 +9,7 @@ from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_poo
 from torch_geometric.utils import to_dense_adj
 
 class GeomPool_GNN(torch.nn.Module):
-    def __init__(self, hidden_channels, out_channels, num_layers, dropout, aggregation_mode, node_types):
+    def __init__(self, hidden_channels, out_channels, num_layers, dropout, aggregation_mode, node_types, meta_data = None):
         super().__init__()
         torch.manual_seed(1234567)
 
@@ -28,7 +28,8 @@ class GeomPool_GNN(torch.nn.Module):
                                                          num_layers= self.num_layers, 
                                                          dropout = self.dropout, 
                                                          aggregation_mode= None, 
-                                                         node_types = node_types)
+                                                         node_types = node_types,
+                                                         meta_data = meta_data)
         
         self.lin1_eye0 = Linear(-1, hidden_channels*2)
         self.lin2_eye0 = Linear(hidden_channels*2, out_channels)
@@ -45,7 +46,7 @@ class GeomPool_GNN(torch.nn.Module):
         
 
 
-    def forward(self, x_dict, edge_dict, batch_dict, slice_dict, training = False, grads = False, pos_dict = None, regression = False ):
+    def forward(self, x_dict, edge_dict, batch_dict, pos_dict, training = False, grads = False, regression = False ):
 
         #last feature is the eye indicator, this
         eye = x_dict["global"][:, -1]>0
@@ -59,7 +60,7 @@ class GeomPool_GNN(torch.nn.Module):
             # assign the nodes based on position to the superior, inferior, temoral or nasal region
 
             # get the node positions
-            node_positions = pos_dict[key]
+            node_positions = pos_dict[key].clone().requires_grad_(False)
             # adjust position to -600 to 600 for both x and y axis
             node_positions -= 600
 
