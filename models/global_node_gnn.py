@@ -1,11 +1,11 @@
 import torch
 #from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, HeteroLinear,Linear, GATConv, EdgeConv, HeteroDictLinear
+from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, HeteroLinear,Linear, GATConv, EdgeConv, HeteroDictLinear, HANConv
 
 
 class GNN_global_node(torch.nn.Module):
-    def __init__(self, hidden_channels, out_channels, num_layers, dropout, aggregation_mode ,node_types):
+    def __init__(self, hidden_channels, out_channels, num_layers, dropout, aggregation_mode ,node_types, meta_data = None):
         super().__init__()
         torch.manual_seed(1234567)
 
@@ -36,27 +36,33 @@ class GNN_global_node(torch.nn.Module):
         self.cat_comps = torch.nn.ModuleList()
 
         self.convs = torch.nn.ModuleList()
+        self.han_convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HeteroConv({
-                ('graph_1', 'to', 'graph_1'): SAGEConv(-1, hidden_channels, aggr = ["mean", "std"]),
-                ('graph_2', 'to', 'graph_2'): SAGEConv(-1, hidden_channels, aggr =["mean", "std"]),
-                ('graph_1', 'to', 'graph_2'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False, aggr = ["mean", "std"]),
-                ('graph_2', 'rev_to', 'graph_1'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False, aggr = ["mean", "std"]),
-                ('global', 'to', 'graph_1'): SAGEConv((-1,-1), hidden_channels, add_self_loops=False), #
-                ('global', 'to', 'graph_2'): SAGEConv((-1, -1), hidden_channels, add_self_loops=False), #
-                ('global', 'to', 'global'): SAGEConv(-1,hidden_channels), 
+                ('graph_1', 'to', 'graph_1'): GATConv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
+                ('graph_2', 'to', 'graph_2'): GATConv(-1, hidden_channels),
+                ('graph_1', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+                ('graph_2', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+                ('global', 'to', 'graph_1'): GATConv((-1,-1), hidden_channels, add_self_loops=False), #
+                ('global', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False), #
+                ('global', 'to', 'global'): GATConv(-1,hidden_channels), 
             }, aggr='cat')
             self.convs.append(conv)
             self.cat_comps.append(HeteroDictLinear(-1, hidden_channels, types= node_types + ["global"]))
 
+            han_conv = HANConv(-1, hidden_channels, metadata=meta_data, heads = 8)
+
+            self.han_convs.append(han_conv)
+
+
 
         # linear layers for skip connections
-        self.skip_lin = torch.nn.ModuleList()
-        for _ in range(num_layers):
-            lin = torch.nn.ModuleDict()
-            for node_type in self.node_types:
-                lin[node_type] = Linear(-1, hidden_channels)
-            self.skip_lin.append(lin)
+        #self.skip_lin = torch.nn.ModuleList()
+        #for _ in range(num_layers):
+        #    lin = torch.nn.ModuleDict()
+        #    for node_type in self.node_types:
+        #        lin[node_type] = Linear(-1, hidden_channels)
+        #    self.skip_lin.append(lin)
 
         # createa batch norm layer for each node type
         self.batch_norm_dict_pre_conv = torch.nn.ModuleDict()
@@ -94,23 +100,25 @@ class GNN_global_node(torch.nn.Module):
         
     def forward_core(self, x_dict, edge_index_dict, training,  grads):
         # linear layer batchnorm and relu
+        # copy the input dict
+        x_dict = x_dict.copy()
+
         for node_type in self.node_types:
             x_dict[node_type] = self.batch_norm_dict_pre_conv[node_type](self.pre_lin_dict[node_type](x_dict[node_type])).relu()
 
         # convolutions followed by relu
-        for i, conv in enumerate(self.convs):
+        for i, conv in enumerate(self.han_convs): # vs self.convs
             # apply the conv and then add the skip connections
+
+            x_dict_old = x_dict.copy()
+
             x_dict = conv(x_dict, edge_index_dict)
-            x_dict = {key: x.relu() for key, x in x_dict.items()}
+            #x_dict = {key: x.relu() for key, x in x_dict.items()} # use with self.convs
             # cat comp
+            #x_dict = self.cat_comps[i](x_dict)
 
-            x_dict = self.cat_comps[i](x_dict)
-
-
-
-            ## apply the skip connections
-            #for node_type in self.node_types:
-            #    x_dict[node_type] = x_dict[node_type] + self.skip_lin[i][node_type](x_dict[node_type])
+            for node_type in self.node_types:
+                x_dict[node_type] = x_dict[node_type] + x_dict_old[node_type] #self.skip_lin[i][node_type](x_dict_old[node_type])
 
         for node_type in self.node_types:
             x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x_dict[node_type]))

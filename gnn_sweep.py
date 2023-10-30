@@ -14,12 +14,12 @@ import wandb
 from sklearn.preprocessing import LabelBinarizer
 
 
-torch.cuda.empty_cache()
+
 
 # Define sweep config
 sweep_configuration = {
-    "method": "bayes",
-    "name": "sweep",
+    "method": "random",
+    "name": "HGN",
     "metric": {"goal": "maximize", "name": "best_mean_auc"},
     "parameters": {
         "batch_size": {"values": [8, 16, 32, 64]},
@@ -44,15 +44,15 @@ data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
 octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 2, "Early NPDR": 1, "Late NPDR": 1}
 label_names = ["Healthy/DM", "NPDR", "PDR"]
 
-#vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
-#void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
-#hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
-#label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
+vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
+void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
+hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
+label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
 
-vessel_graph_path = f"../{data_type}_vessel_graph"
-void_graph_path = f"../{data_type}_void_graph"
-hetero_edges_path = f"../{data_type}_heter_edges"
-label_file = "../labels.csv"
+#vessel_graph_path = f"../{data_type}_vessel_graph"
+#void_graph_path = f"../{data_type}_void_graph"
+#hetero_edges_path = f"../{data_type}_heter_edges"
+#label_file = "../labels.csv"
 
 
 
@@ -90,8 +90,11 @@ node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(tra
 #torch.save(node_std_tensors, f"checkpoints/{data_type}_node_std_tensors_global_node_node_degs.pt")
 
 #node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(train_dataset)
-node_mean_tensors = torch.load(f"../{data_type}_node_mean_tensors_global_node_node_degs.pt")
-node_std_tensors = torch.load(f"../{data_type}_node_std_tensors_global_node_node_degs.pt")
+#node_mean_tensors = torch.load(f"../{data_type}_node_mean_tensors_global_node_node_degs.pt")
+#node_std_tensors = torch.load(f"../{data_type}_node_std_tensors_global_node_node_degs.pt")
+
+node_mean_tensors = torch.load(f"checkpoints/{data_type}_node_mean_tensors_global_node_node_degs.pt")
+node_std_tensors = torch.load(f"checkpoints/{data_type}_node_std_tensors_global_node_node_degs.pt")
 
 prep.hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
 prep.hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)
@@ -144,6 +147,7 @@ def main():
                               dropout = wandb.config.dropout, 
                               aggregation_mode= agg_mode_dict[wandb.config.aggregation_mode],
                               node_types = node_types,
+                              meta_data= train_dataset[0].metadata(),
                               )
 
     # create data loaders for training and test set
@@ -171,9 +175,9 @@ def main():
         outList, yList = classifier.predict(test_loader)
 
         if wandb.config.regression:
-            y_p = np.array([item.cpu().detach().numpy() for sublist in outList for item in sublist])
+            y_p = np.array(outList).squeeze() #y_p = np.array([item.cpu().detach().numpy() for sublist in outList for item in sublist])
         else:
-            y_p = np.array([item.argmax().cpu().detach().numpy() for sublist in outList for item in sublist])
+            y_p = np.array(outList).argmax(axis=1)# y_p = np.array([item.argmax().cpu().detach().numpy() for sublist in outList for item in sublist])
         
         y_t = np.array([item.detach().cpu().numpy() for sublist in yList for item in sublist])
         #print(f'Epoch: {epoch:03d}, Loss: {loss:.6f}, Train Acc: {train_acc:.4f}, Test Acc: {accuracy_score(y_t, y_p):.4f}, Test Bal Acc: {balanced_accuracy_score(y_t, y_p):.4f}')
