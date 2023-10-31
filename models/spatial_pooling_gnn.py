@@ -18,7 +18,7 @@ class GeomPool_GNN(torch.nn.Module):
         self.num_layers = num_layers
         self.dropout = dropout
         self.aggregation_mode = aggregation_mode
-        self.node_types = node_types
+        self.node_types = node_types 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -31,13 +31,15 @@ class GeomPool_GNN(torch.nn.Module):
                                                          node_types = node_types,
                                                          meta_data = meta_data)
         
-        self.lin1_eye0 = Linear(-1, hidden_channels*2)
-        self.lin2_eye0 = Linear(hidden_channels*2, out_channels)
-        self.lin2_eye0_reg = Linear(hidden_channels*2, 1)
+        self.lin1_eye0 = Linear(-1, hidden_channels*4)
+        self.lin2_eye0 = Linear(hidden_channels*4, hidden_channels*2)
+        self.lin3_eye0 = Linear(hidden_channels*2, out_channels)
+        #self.lin2_eye0_reg = Linear(hidden_channels*2, 1)
 
-        self.lin1_eye1 = Linear(-1, hidden_channels*2)
-        self.lin2_eye1 = Linear(hidden_channels*2, out_channels)
-        self.lin2_eye1_reg = Linear(hidden_channels*2, 1)
+        self.lin1_eye1 = Linear(-1, hidden_channels*4)
+        self.lin2_eye1 = Linear(hidden_channels*4, hidden_channels*2)
+        self.lin3_eye1 = Linear(hidden_channels*2, out_channels)
+        #self.lin2_eye1_reg = Linear(hidden_channels*2, 1)
 
         self.lin1 = Linear(-1, hidden_channels*2)
         self.lin2 = Linear(hidden_channels*2, hidden_channels)
@@ -46,12 +48,12 @@ class GeomPool_GNN(torch.nn.Module):
         
 
 
-    def forward(self, x_dict, edge_dict, batch_dict, pos_dict, training = False, grads = False, regression = False ):
+    def forward(self, x_dict, edge_dict, batch_dict, pos_dict, grads = False, regression = False ):
 
         #last feature is the eye indicator, this
         eye = x_dict["global"][:, -1]>0
         #print(eye)
-        x_dict = self.gnn1_embed.forward_core(x_dict, edge_dict, training=training,  grads=grads)
+        x_dict = self.gnn1_embed.forward_core(x_dict, edge_dict,   grads=grads)
 
         # pool
 
@@ -78,24 +80,40 @@ class GeomPool_GNN(torch.nn.Module):
             # assign to class 0 or 1 by slicing a diagonal through the image
             # diagonal is from top left to bottom right
 
+
             for i in range(4):
-                rep = self.aggregation_mode(x_dict[key][labels==i], batch_dict[key][labels ==i])
-                representation_concat.append(rep)
-             
-        representation_concat.append(self.aggregation_mode(x_dict["global"], batch_dict["global"]))
+                # check if the aggregation mode is a list
+                if isinstance(self.aggregation_mode, list):
+                    for j in range(len(self.aggregation_mode)):
+                        rep = self.aggregation_mode[j](x_dict[key][labels==i], batch_dict[key][labels ==i])
+                        representation_concat.append(rep)
+                else:
+                    rep = self.aggregation_mode(x_dict[key][labels==i], batch_dict[key][labels ==i])
+                    representation_concat.append(rep)
+        
+
+        if isinstance(self.aggregation_mode, list):
+            for j in range(len(self.aggregation_mode)):
+                representation_concat.append(self.aggregation_mode[j](x_dict["global"], batch_dict["global"]))
+        else:
+            representation_concat.append(self.aggregation_mode(x_dict["global"], batch_dict["global"]))
+
         x = torch.cat(representation_concat, dim=1)  
         #x = F.dropout(x, p=self.dropout, training = training)
 
         if regression == False:
+
             ## apply linear layer fro each sample in the batch according to the eye
             x_eye0 = self.lin1_eye0(x[eye == 0]).relu()
-            x_eye0 = F.dropout(x_eye0, p=self.dropout, training = training)
-            x_eye0 = self.lin2_eye0(x_eye0)
+            x_eye0 = self.lin2_eye0(x_eye0).relu()
+            x_eye0 = F.dropout(x_eye0, p=self.dropout, training = self.training)
+            x_eye0 = self.lin3_eye0(x_eye0)
 #   
             x_eye1 = self.lin1_eye1(x[eye == 1]).relu()
-            x_eye1 = F.dropout(x_eye1, p=self.dropout, training = training)
-            x_eye1 = self.lin2_eye1(x_eye1)
-#   
+            x_eye1 = self.lin2_eye1(x_eye1).relu()
+            x_eye1 = F.dropout(x_eye1, p=self.dropout, training = self.training)
+            x_eye1 = self.lin3_eye1(x_eye1)
+
             ## build batch vector again
 #   
             x = torch.zeros((x.shape[0], x_eye0.shape[1]), device=self.device)
@@ -107,11 +125,11 @@ class GeomPool_GNN(torch.nn.Module):
         else:
             ## apply linear layer fro each sample in the batch according to the eye
             x_eye0 = self.lin1_eye0(x[eye == 0]).relu()
-            x_eye0 = F.dropout(x_eye0, p=self.dropout, training = training)
+            x_eye0 = F.dropout(x_eye0, p=self.dropout, training = self.training)
             x_eye0 = self.lin2_eye0_reg(x_eye0)
 #   
             x_eye1 = self.lin1_eye1(x[eye == 1]).relu()
-            x_eye1 = F.dropout(x_eye1, p=self.dropout, training = training)
+            x_eye1 = F.dropout(x_eye1, p=self.dropout, training = self.training)
             x_eye1 = self.lin2_eye1_reg(x_eye1)
 #   
             ## build batch vector again

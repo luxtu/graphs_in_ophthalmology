@@ -74,31 +74,37 @@ class GNN_global_node(torch.nn.Module):
 
             #self.han_convs.append(han_conv)
 
-        self.lin1 = Linear(-1, hidden_channels)
-        self.lin2 = Linear(hidden_channels, out_channels)
+        self.lin1 = Linear(-1, hidden_channels*2)
+        self.lin2 = Linear(hidden_channels*2, hidden_channels)
+        self.lin3 = Linear(hidden_channels, out_channels)
 
 
-    def forward(self, x_dict, edge_index_dict, batch_dict, training = False, grads = False, **kwargs):
+    def forward(self, x_dict, edge_index_dict, batch_dict, grads = False, **kwargs):
 
-
-        x_dict = self.forward_core(x_dict, edge_index_dict, training = training, grads = grads)
+        x_dict = self.forward_core(x_dict, edge_index_dict, grads = grads)
 
         # for each node type, aggregate over all nodes of that type
         type_specific_representations = []
         for key, x in x_dict.items():
-            rep = self.aggregation_mode(x_dict[key], batch_dict[key])
-            type_specific_representations.append(rep)
+            if isinstance(self.aggregation_mode, list):
+                for j in range(len(self.aggregation_mode)):
+                    type_specific_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))
+            else:
+                type_specific_representations.append(self.aggregation_mode(x_dict[key], batch_dict[key]))
+
+            #rep = self.aggregation_mode(x_dict[key], batch_dict[key])
+            #type_specific_representations.append(rep)
 
 
         x = torch.cat(type_specific_representations, dim=1)  
-        x = F.dropout(x, p=self.dropout, training = training)
+        x = F.dropout(x, p=self.dropout, training = self.training)
 
 
-        return self.lin2(self.lin1(x).relu())
+        return self.lin3(self.lin2(self.lin1(x).relu()).relu())
 
 
         
-    def forward_core(self, x_dict, edge_index_dict, training,  grads):
+    def forward_core(self, x_dict, edge_index_dict,  grads):
         # linear layer batchnorm and relu
         # copy the input dict
         x_dict = x_dict.copy()

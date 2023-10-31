@@ -20,15 +20,14 @@ class graphClassifierHetero():
         size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
         for data in loader:
             data.to(self.device)
-            #print(torch.cuda.memory_allocated()/1024/1024/1024)
             pos_dict = {}
             #print(data.y)
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
-            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, training = True, pos_dict = pos_dict, regression =self.regression)  # Perform a single forward pass.
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression)  # Perform a single forward pass.
             #print(out.shape)
             #print(data.y.shape)
-            loss = self.lossFunc(out, data.y)  # Compute the loss solely based on the training nodes.
+            loss = self.lossFunc(out, data.y)
             loss.backward()  # Derive gradients.
             self.optimizer.step()  # Update parameters based on gradients.
             self.optimizer.zero_grad()  # Clear gradients.
@@ -47,7 +46,7 @@ class graphClassifierHetero():
             pos_dict = {}
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
-            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, training = False, pos_dict = pos_dict, regression =self.regression) 
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression) 
 
             if self.regression:
                 # assign classes according to thresholds
@@ -74,7 +73,7 @@ class graphClassifierHetero():
             pos_dict = {}
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
-            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict,  training = False, pos_dict = pos_dict, regression =self.regression)  
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression)  
             if self.regression:
                 # assign classes according to thresholds
                 #out = out.squeeze()
