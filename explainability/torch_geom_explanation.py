@@ -46,6 +46,7 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
     graph_2_name = "graph_2"
 
 
+
     fig, ax = plt.subplots()
     side_l = 5.5
     fig.set_figwidth(side_l)
@@ -56,9 +57,26 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
     het_graph1_pos = hetero_graph[graph_1_name].pos.cpu().detach().numpy()
     het_graph2_pos = hetero_graph[graph_2_name].pos.cpu().detach().numpy()
 
-    print(explanation_graph.node_mask_dict[graph_1_name].sum(dim=-1))
-    print(explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1).shape)
-    print(explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1))
+    #print(explanation_graph.node_mask_dict[graph_1_name].sum(dim=-1))
+    #print(explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1).shape)
+    #print(explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1))
+
+    if threshold == "adaptive":
+        max_g1 = explanation_graph.node_mask_dict[graph_1_name].sum(dim=-1).max()
+        max_g2 = explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1).max()
+        max_val = max(max_g1, max_g2)
+
+        threshold = max_val * 0.01
+    
+    if edge_threshold == "adaptive":
+        max_g1 = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_1_name].max()
+        max_g2 = explanation_graph.edge_mask_dict[graph_2_name, "to", graph_2_name].max()
+        max_g12 = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name].max()
+        max_g21 = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name].max()
+        max_val = max(max_g1, max_g2, max_g12, max_g21)
+
+        edge_threshold = max_val * 0.01
+        
 
 
     het_graph1_rel_pos = explanation_graph.node_mask_dict[graph_1_name].sum(dim=-1) > threshold
@@ -71,8 +89,8 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
     het_graph2_rel_pos = het_graph2_pos[het_graph2_rel_pos]
 
 
-    ax.scatter(het_graph1_rel_pos[:,1], het_graph1_rel_pos[:,0],zorder = 2, s = 8)
-    ax.scatter(het_graph2_rel_pos[:,1], het_graph2_rel_pos[:,0],zorder = 2, s = 12, marker = "s")
+    ax.scatter(het_graph1_rel_pos[:,1], het_graph1_rel_pos[:,0], zorder = 2, s = 8)
+    ax.scatter(het_graph2_rel_pos[:,1], het_graph2_rel_pos[:,0], zorder = 2, s = 12, marker = "s")
 
     het_graph1_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_1_name] > edge_threshold
     het_graph2_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "to", graph_2_name] > edge_threshold
@@ -102,3 +120,4 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
 
     plt.tight_layout()
     plt.savefig(path)
+    plt.close()
