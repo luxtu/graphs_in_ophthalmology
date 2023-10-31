@@ -1,7 +1,7 @@
 import torch
 #from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, HeteroLinear,Linear, GATConv, EdgeConv, HeteroDictLinear, HANConv
+from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, HeteroLinear, Linear, GATConv, EdgeConv, HeteroDictLinear, HANConv, HeteroBatchNorm
 
 
 class GNN_global_node(torch.nn.Module):
@@ -15,14 +15,35 @@ class GNN_global_node(torch.nn.Module):
         self.dropout = dropout
         self.aggregation_mode = aggregation_mode
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.node_types = node_types + ["global"]
 
-        self.pre_lin_dict = torch.nn.ModuleDict()
-        for node_type in node_types:
-            self.pre_lin_dict[node_type] = Linear(-1, hidden_channels)
 
-        self.post_lin_dict = torch.nn.ModuleDict()
-        for node_type in node_types:
-            self.post_lin_dict[node_type] = Linear(-1, hidden_channels)
+        num_pre_processing_layers = 3
+        self.pre_processing_lin_layers = torch.nn.ModuleList()
+        self.pre_processing_batch_norm = torch.nn.ModuleList()
+
+        for _ in range(num_pre_processing_layers):
+            pre_lin_dict = torch.nn.ModuleDict()
+            pre_batch_norm_dict = torch.nn.ModuleDict()
+            for node_type in self.node_types:
+                pre_lin_dict[node_type] = Linear(-1, hidden_channels)
+                pre_batch_norm_dict[node_type] = torch.nn.BatchNorm1d(hidden_channels)
+                
+            self.pre_processing_lin_layers.append(pre_lin_dict)
+            self.pre_processing_batch_norm.append(pre_batch_norm_dict)
+
+        num_post_processing_layers = 3
+        self.post_processing_lin_layers = torch.nn.ModuleList()
+        self.post_processing_batch_norm = torch.nn.ModuleList()
+
+        for _ in range(num_post_processing_layers):
+            post_lin_dict = torch.nn.ModuleDict()
+            post_batch_norm_dict = torch.nn.ModuleDict()
+            for node_type in self.node_types:
+                post_lin_dict[node_type] = Linear(-1, hidden_channels)
+                post_batch_norm_dict[node_type] = torch.nn.BatchNorm1d(hidden_channels)
+            self.post_processing_lin_layers.append(post_lin_dict)
+            self.post_processing_batch_norm.append(post_batch_norm_dict)
 
 
         self.final_conv_acts = {"graph_1": None, "graph_2": None}
@@ -31,57 +52,36 @@ class GNN_global_node(torch.nn.Module):
         self.final_conv_grads_1 = None
         self.final_conv_grads_2 = None
 
-        self.node_types = node_types    
         
         self.cat_comps = torch.nn.ModuleList()
 
         self.convs = torch.nn.ModuleList()
-        self.han_convs = torch.nn.ModuleList()
+        #self.han_convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = HeteroConv({
-                ('graph_1', 'to', 'graph_1'): GATConv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
-                ('graph_2', 'to', 'graph_2'): GATConv(-1, hidden_channels),
+                ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
+                ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
                 ('graph_1', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
                 ('graph_2', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
                 ('global', 'to', 'graph_1'): GATConv((-1,-1), hidden_channels, add_self_loops=False), #
                 ('global', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False), #
-                ('global', 'to', 'global'): GATConv(-1,hidden_channels), 
+                ('global', 'to', 'global'): GCNConv(-1,hidden_channels), 
             }, aggr='cat')
             self.convs.append(conv)
-            self.cat_comps.append(HeteroDictLinear(-1, hidden_channels, types= node_types + ["global"]))
+            self.cat_comps.append(HeteroDictLinear(-1, hidden_channels, types= self.node_types))
 
-            han_conv = HANConv(-1, hidden_channels, metadata=meta_data, heads = 8)
+            #han_conv = HANConv(-1, hidden_channels, metadata=meta_data, heads = 1)
 
-            self.han_convs.append(han_conv)
-
-
-
-        # linear layers for skip connections
-        #self.skip_lin = torch.nn.ModuleList()
-        #for _ in range(num_layers):
-        #    lin = torch.nn.ModuleDict()
-        #    for node_type in self.node_types:
-        #        lin[node_type] = Linear(-1, hidden_channels)
-        #    self.skip_lin.append(lin)
-
-        # createa batch norm layer for each node type
-        self.batch_norm_dict_pre_conv = torch.nn.ModuleDict()
-        for node_type in self.node_types:
-            self.batch_norm_dict_pre_conv[node_type] = torch.nn.BatchNorm1d(hidden_channels)
-
-        self.batch_norm_dict_post_conv = torch.nn.ModuleDict()
-        for node_type in self.node_types:
-            self.batch_norm_dict_post_conv[node_type] = torch.nn.BatchNorm1d(hidden_channels)
-
+            #self.han_convs.append(han_conv)
 
         self.lin1 = Linear(-1, hidden_channels)
         self.lin2 = Linear(hidden_channels, out_channels)
 
 
-    def forward(self, x_dict, edge_index_dict, batch_dict, slice_dict, training = False, grads = False):
+    def forward(self, x_dict, edge_index_dict, batch_dict, training = False, grads = False, **kwargs):
 
 
-        x_dict = self.forward_core(x_dict, edge_index_dict,training = training, grads = grads)
+        x_dict = self.forward_core(x_dict, edge_index_dict, training = training, grads = grads)
 
         # for each node type, aggregate over all nodes of that type
         type_specific_representations = []
@@ -103,31 +103,41 @@ class GNN_global_node(torch.nn.Module):
         # copy the input dict
         x_dict = x_dict.copy()
 
-        for node_type in self.node_types:
-            x_dict[node_type] = self.batch_norm_dict_pre_conv[node_type](self.pre_lin_dict[node_type](x_dict[node_type])).relu()
-
-        # convolutions followed by relu
-        for i, conv in enumerate(self.han_convs): # vs self.convs
+        ########################################
+        #pre processing
+        for i in range(len(self.pre_processing_lin_layers)):
+            for node_type in self.node_types:
+                x_dict[node_type] = self.pre_processing_batch_norm[i][node_type](self.pre_processing_lin_layers[i][node_type](x_dict[node_type])).relu()
+        #########################################
+        #########################################
+        # gnn convolutions
+        for i, conv in enumerate(self.convs): # vs self.convs
             # apply the conv and then add the skip connections
 
             x_dict_old = x_dict.copy()
-
             x_dict = conv(x_dict, edge_index_dict)
-            #x_dict = {key: x.relu() for key, x in x_dict.items()} # use with self.convs
+            x_dict = {key: x.relu() for key, x in x_dict.items()} # use with self.convs
             # cat comp
-            #x_dict = self.cat_comps[i](x_dict)
+            x_dict = self.cat_comps[i](x_dict)
 
             for node_type in self.node_types:
-                x_dict[node_type] = x_dict[node_type] + x_dict_old[node_type] #self.skip_lin[i][node_type](x_dict_old[node_type])
+                x_dict[node_type] = x_dict[node_type] + x_dict_old[node_type] # skip connection
+        #########################################
+        ########################################
+        #pre processing
+        for i in range(len(self.post_processing_lin_layers)):
+            for node_type in self.node_types:
+                x_dict[node_type] = self.post_processing_batch_norm[i][node_type](self.post_processing_lin_layers[i][node_type](x_dict[node_type]))
 
-        for node_type in self.node_types:
-            x_dict[node_type] = self.batch_norm_dict_post_conv[node_type](self.post_lin_dict[node_type](x_dict[node_type]))
+            # relu if not last layer
+            if i != len(self.post_processing_lin_layers) - 1:
+                for node_type in self.node_types:
+                    x_dict[node_type] = x_dict[node_type].relu()
+        #########################################
 
         self.final_conv_acts_1 = x_dict["graph_1"]
         self.final_conv_acts_2 = x_dict["graph_2"]
 
-        x_dict = {key: x.relu() for key, x in x_dict.items()}
-            
         if grads:
             # register hooks for the gradients
             self.final_conv_acts_1.register_hook(self.activations_hook_1)
