@@ -4,54 +4,14 @@ from torch.nn import functional as F
 from sklearn.preprocessing import MinMaxScaler
 
 
-def max_cam_data(model, data, target_class, scale = False):
-    """
-    Assigns a 1 to all the nodes that participated in the prediction of the target class and a 0 to the rest.
-    """
-    model.eval()
-    output = model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True, grads = True)
-
-    if type(target_class) == int:
-        target_class = [target_class] 
-
-    heat_maps = []
-
-    for c in target_class:
-        output[:, c].backward(retain_graph=True)
-        # Compute Grad-CAM
-        node_heat_map = max_cam_heat_map(model)
-        heat_maps.append(node_heat_map)
-
-    if len(heat_maps) == 1:
-        return heat_maps[0]
-    else:  
-        return heat_maps
-
-
-def max_cam_heat_map(model):
-    active_nodes_1 = torch.max(model.final_conv_grads_1, axis=0).indices.unique()[1:] # this is the mean across the features
-    active_nodes_2 = torch.max(model.final_conv_grads_2, axis=0).indices.unique()[1:] # this is the mean across the features
-
-    node_heat_map_1 = np.zeros(model.final_conv_acts_1.shape[0])
-    node_heat_map_2 = np.zeros(model.final_conv_acts_2.shape[0])
-
-    node_heat_map_1[active_nodes_1.cpu().detach().numpy()]=1
-    node_heat_map_2[active_nodes_2.cpu().detach().numpy()]=1
-
-    print(active_nodes_1)
-    print(active_nodes_2)
-
-    node_heat_map = {}
-    #print(node_heat_map_1)
-    node_heat_map["graph_1"] = torch.tensor(np.array(node_heat_map_1))
-    node_heat_map["graph_2"] = torch.tensor(np.array(node_heat_map_2))
-
-    return node_heat_map
 
 def grad_cam_data(model, data, target_class, scale = False, relu = False):
     # Perform forward pass for the target class
     model.eval()
-    output = model(data.x_dict, data.edge_index_dict, data.batch_dict, data._slice_dict, training = True, grads = True)
+    pos_dict = {}
+    for key in ["graph_1", "graph_2"]:
+        pos_dict[key] = data[key].pos
+    output = model(data.x_dict, data.edge_index_dict, data.batch_dict,  grads = True, pos_dict = pos_dict) #data._slice_dict #training = True,
 
     if type(target_class) == int:
         target_class = [target_class] 
@@ -61,7 +21,7 @@ def grad_cam_data(model, data, target_class, scale = False, relu = False):
     for c in target_class:
         output[:, c].backward(retain_graph=True)
         # Compute Grad-CAM
-        node_heat_map = grad_cam_heat_map(model, relu = relu)
+        node_heat_map = grad_cam_heat_map(model, relu = relu) # .gnn1_embed
         heat_maps.append(node_heat_map)
 
     if scale:

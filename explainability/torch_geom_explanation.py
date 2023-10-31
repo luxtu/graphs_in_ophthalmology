@@ -91,7 +91,7 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
         if het_graph2_rel_edges[i]:
             ax.plot(het_graph2_pos[edge,1], het_graph2_pos[edge,0], c="red",linewidth=1, alpha=0.5, zorder = 1)
 
-    for edge in enumerate(hetero_graph[graph_1_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
+    for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
         if het_graph12_rel_edges[i] or het_graph21_rel_edges[i]:
             x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
             y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
