@@ -107,7 +107,7 @@ class HeteroGraphPlotter2D():
     def set_cls(self, cls):
         self.cls = cls
 
-    def plot_graph_2D(self, het_graph , edges= True, ax = None, pred_val_dict = None):
+    def plot_graph_2D(self, het_graph , edges= True, ax = None, pred_val_dict = None, path = None):
         # create a function that returns a plot of the graph in 2D
         # use the node positions and the edge indices to plot the graph
 
@@ -171,4 +171,12 @@ class HeteroGraphPlotter2D():
             plt.colorbar(sc2)
         else:
             ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8)
-            ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, marker = "s")       
+            ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, marker = "s")
+
+
+        if path is not None:
+            plt.tight_layout()
+            plt.savefig(path)
+            plt.close()
+
+
