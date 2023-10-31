@@ -29,7 +29,7 @@ sweep_configuration = {
         "hidden_channels": {"values": [32, 64]}, #[64, 128]
         "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
         "num_layers": {"values": [1,2,3]},
-        "aggregation_mode": {"values": ["global_mean_pool", "global_add_pool"]},#, "global_mean_pool",  "global_add_pool" # add pool does not work
+        "aggregation_mode": {"values": ["global_mean_pool", "global_add_pool", "combined"]},#, "global_mean_pool",  "global_add_pool" # add pool does not work
         "class_weights": {"values": ["unbalanced", "balanced"]}, # "balanced", 
         "dataset": {"values": ["DCP"]}, #, "DCP"
         "regression": {"values": [False]},
@@ -44,15 +44,15 @@ data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
 octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 2, "Early NPDR": 1, "Late NPDR": 1}
 label_names = ["Healthy/DM", "NPDR", "PDR"]
 
-vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
-void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
-hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
-label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
+#vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
+#void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
+#hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
+#label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
 
-#vessel_graph_path = f"../{data_type}_vessel_graph"
-#void_graph_path = f"../{data_type}_void_graph"
-#hetero_edges_path = f"../{data_type}_heter_edges"
-#label_file = "../labels.csv"
+vessel_graph_path = f"../{data_type}_vessel_graph"
+void_graph_path = f"../{data_type}_void_graph"
+hetero_edges_path = f"../{data_type}_heter_edges"
+label_file = "../labels.csv"
 
 
 
@@ -90,11 +90,11 @@ node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(tra
 #torch.save(node_std_tensors, f"checkpoints/{data_type}_node_std_tensors_global_node_node_degs.pt")
 
 #node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(train_dataset)
-#node_mean_tensors = torch.load(f"../{data_type}_node_mean_tensors_global_node_node_degs.pt")
-#node_std_tensors = torch.load(f"../{data_type}_node_std_tensors_global_node_node_degs.pt")
+node_mean_tensors = torch.load(f"../{data_type}_node_mean_tensors_global_node_node_degs.pt")
+node_std_tensors = torch.load(f"../{data_type}_node_std_tensors_global_node_node_degs.pt")
 
-node_mean_tensors = torch.load(f"checkpoints/{data_type}_node_mean_tensors_global_node_node_degs.pt")
-node_std_tensors = torch.load(f"checkpoints/{data_type}_node_std_tensors_global_node_node_degs.pt")
+#node_mean_tensors = torch.load(f"checkpoints/{data_type}_node_mean_tensors_global_node_node_degs.pt")
+#node_std_tensors = torch.load(f"checkpoints/{data_type}_node_std_tensors_global_node_node_degs.pt")
 
 prep.hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
 prep.hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)
@@ -112,12 +112,12 @@ class_weights = class_weights ** 0.5
 num_classes = class_weights.shape[0]
 node_types = ["graph_1", "graph_2"]
 
-agg_mode_dict = {"global_mean_pool": global_mean_pool, "global_max_pool": global_max_pool, "global_add_pool": global_add_pool}
+agg_mode_dict = {"global_mean_pool": global_mean_pool, "global_max_pool": global_max_pool, "global_add_pool": global_add_pool, "combined": [global_mean_pool, global_add_pool]}
 
 
 
 def main():
-    torch.autograd.set_detect_anomaly(True)
+    #torch.autograd.set_detect_anomaly(True)
     run = wandb.init()
     api = wandb.Api()
     sweep = api.sweep("luxtu/graph_pathology/" + sweep_id)
@@ -139,6 +139,13 @@ def main():
     #                                    max_nodes = max_nodes
     #                                    )
 
+    #model = global_node_gnn.GNN_global_node(hidden_channels= wandb.config.hidden_channels,
+    #                                                     out_channels= num_classes,
+    #                                                     num_layers= wandb.config.num_layers, 
+    #                                                     dropout = wandb.config.dropout, 
+    #                                                     aggregation_mode= agg_mode_dict[sweep_config.aggregation_mode], 
+    #                                                     node_types = node_types,
+    #                                                     meta_data = train_dataset[0].metadata())
 
 
     model = spatial_pooling_gnn.GeomPool_GNN(hidden_channels = wandb.config.hidden_channels, 
