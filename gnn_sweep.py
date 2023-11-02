@@ -28,8 +28,13 @@ sweep_configuration = {
         "weight_decay": {"max": 0.01, "min": 0.00001},
         "hidden_channels": {"values": [32, 64]}, #[64, 128]
         "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
-        "num_layers": {"values": [1,2,3]},
+        "num_layers": {"values": [1,2,5]},
         "aggregation_mode": {"values": ["global_mean_pool", "global_add_pool", "combined"]},#, "global_mean_pool",  "global_add_pool" # add pool does not work
+        "pre_layers": {"values": [1,2,4]},
+        "post_layers": {"values": [1,2,4]},
+        "batch_norm": {"values": [True, False]},
+        "hetero_conns": {"values": [True, False]},
+        "conv_aggr": {"values": ["cat", "sum", "mean"]}, # cat, sum, mean
         "class_weights": {"values": ["unbalanced", "balanced"]}, # "balanced", 
         "dataset": {"values": ["DCP"]}, #, "DCP"
         "regression": {"values": [False]},
@@ -139,23 +144,28 @@ def main():
     #                                    max_nodes = max_nodes
     #                                    )
 
-    #model = global_node_gnn.GNN_global_node(hidden_channels= wandb.config.hidden_channels,
-    #                                                     out_channels= num_classes,
-    #                                                     num_layers= wandb.config.num_layers, 
-    #                                                     dropout = wandb.config.dropout, 
-    #                                                     aggregation_mode= agg_mode_dict[sweep_config.aggregation_mode], 
-    #                                                     node_types = node_types,
-    #                                                     meta_data = train_dataset[0].metadata())
+    model = global_node_gnn.GNN_global_node(hidden_channels= wandb.config.hidden_channels,
+                                                        out_channels= num_classes,
+                                                        num_layers= wandb.config.num_layers, 
+                                                        dropout = wandb.config.dropout, 
+                                                        aggregation_mode= agg_mode_dict[sweep_config.aggregation_mode], 
+                                                        node_types = node_types,
+                                                        num_pre_processing_layers = wandb.config.pre_layers,
+                                                        num_post_processing_layers = wandb.config.post_layers,
+                                                        batch_norm = wandb.config.batch_norm,
+                                                        conv_aggr = wandb.config.conv_aggr,
+                                                        hetero_conns = wandb.config.hetero_conns,
+                                                        meta_data = train_dataset[0].metadata())
 
 
-    model = spatial_pooling_gnn.GeomPool_GNN(hidden_channels = wandb.config.hidden_channels, 
-                              out_channels= num_classes, 
-                              num_layers= wandb.config.num_layers, 
-                              dropout = wandb.config.dropout, 
-                              aggregation_mode= agg_mode_dict[wandb.config.aggregation_mode],
-                              node_types = node_types,
-                              meta_data= train_dataset[0].metadata(),
-                              )
+    #model = spatial_pooling_gnn.GeomPool_GNN(hidden_channels = wandb.config.hidden_channels, 
+    #                          out_channels= num_classes, 
+    #                          num_layers= wandb.config.num_layers, 
+    #                          dropout = wandb.config.dropout, 
+    #                          aggregation_mode= agg_mode_dict[wandb.config.aggregation_mode],
+    #                          node_types = node_types,
+    #                          meta_data= train_dataset[0].metadata(),
+    #                          )
 
     # create data loaders for training and test set
     train_loader = DataLoader(train_dataset, batch_size = wandb.config.batch_size, shuffle=True)
