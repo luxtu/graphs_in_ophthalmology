@@ -11,7 +11,7 @@ def visualize_feature_importance(explanation, path, features_label_dict, top_k =
     import torch
 
     score = torch.cat([node_mask.sum(dim=0) for node_mask in explanation.node_mask_dict.values()], dim=0)
-    score = score.cpu().numpy()
+    score = score.cpu().detach().numpy()
     all_feat_labels = []
     for node_type in explanation.node_mask_dict.keys():
         all_feat_labels += [
