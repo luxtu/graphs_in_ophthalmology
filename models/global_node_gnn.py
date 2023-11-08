@@ -5,7 +5,19 @@ from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, HeteroL
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
 
 class GNN_global_node(torch.nn.Module):
-    def __init__(self, hidden_channels, out_channels, num_layers, dropout, aggregation_mode ,node_types, meta_data = None, num_pre_processing_layers = 3, num_post_processing_layers = 3, batch_norm = True, conv_aggr = "cat", hetero_conns = True):
+    def __init__(self, hidden_channels, 
+                 out_channels, 
+                 num_layers, 
+                 dropout, 
+                 aggregation_mode ,
+                 node_types, 
+                 meta_data = None, 
+                 num_pre_processing_layers = 3, 
+                 num_post_processing_layers = 3, 
+                 batch_norm = True, 
+                 conv_aggr = "cat", 
+                 hetero_conns = True, 
+                 faz_node = False):
         super().__init__()
         torch.manual_seed(1234567)
 
@@ -15,11 +27,18 @@ class GNN_global_node(torch.nn.Module):
         self.dropout = dropout
         self.aggregation_mode = aggregation_mode
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.node_types = node_types + ["global"]
+        self.faz_node = faz_node
+        if self.faz_node:
+            self.node_types = node_types + ["faz"] #+ ["global"]
+        else:
+            self.node_types = node_types
+        
         self.conv_aggr = conv_aggr
+        self.hetero_conns = hetero_conns
 
 
-        self.num_pre_processing_layers = 3
+
+        self.num_pre_processing_layers = num_pre_processing_layers
         self.pre_processing_lin_layers = torch.nn.ModuleList()
         self.pre_processing_batch_norm = torch.nn.ModuleList()
 
@@ -36,7 +55,7 @@ class GNN_global_node(torch.nn.Module):
             self.pre_processing_lin_layers.append(pre_lin_dict)
             self.pre_processing_batch_norm.append(pre_batch_norm_dict)
 
-        self.num_post_processing_layers = 3
+        self.num_post_processing_layers = num_post_processing_layers
         self.post_processing_lin_layers = torch.nn.ModuleList()
         self.post_processing_batch_norm = torch.nn.ModuleList()
 
@@ -72,25 +91,12 @@ class GNN_global_node(torch.nn.Module):
         self.convs = torch.nn.ModuleList()
         #self.han_convs = torch.nn.ModuleList()
         for _ in range(num_layers):
-            if hetero_conns:
-                conv = HeteroConv({
-                    ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
-                    ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
-                    ('graph_1', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
-                    ('graph_2', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
-                    ('global', 'to', 'graph_1'): GATConv((-1,-1), hidden_channels, add_self_loops=False), #
-                    ('global', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False), #
-                    ('global', 'to', 'global'): GCNConv(-1,hidden_channels), 
-                }, aggr=self.conv_aggr)
+            if self.faz_node:
+                conv = conv_123(self.hidden_channels, self.conv_aggr, self.hetero_conns)
             else:
-                conv = HeteroConv({
-                    ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
-                    ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
-                    ('global', 'to', 'global'): GCNConv(-1,hidden_channels), 
-                }, aggr=self.conv_aggr)
+                conv = conv_12(self.hidden_channels, self.conv_aggr, self.hetero_conns)
 
             self.convs.append(conv)
-
             if self.conv_aggr == "cat":
                 self.cat_comps.append(HeteroDictLinear(-1, hidden_channels, types= self.node_types))
 
@@ -98,37 +104,109 @@ class GNN_global_node(torch.nn.Module):
 
             #self.han_convs.append(han_conv)
 
-        self.lin1 = Linear(-1, hidden_channels*2)
-        self.lin2 = Linear(hidden_channels*2, hidden_channels)
-        self.lin3 = Linear(hidden_channels, out_channels)
+        self.lin1 = Linear(-1, hidden_channels*2, bias=False)
+        self.lin2 = Linear(hidden_channels*2, hidden_channels, bias=False)
+        self.lin3 = Linear(hidden_channels, out_channels, bias=False)
 
 
     def forward(self, x_dict, edge_index_dict, batch_dict, grads = False, **kwargs):
 
-        x_dict = self.forward_core(x_dict, edge_index_dict, grads = grads)
+        #x_dict = self.forward_core(x_dict, edge_index_dict, grads = grads)
+
+        ## for each node type, aggregate over all nodes of that type
+        #start_representations = []
+        #for key in x_dict.keys():
+        #    if isinstance(self.aggregation_mode, list):
+        #        for j in range(len(self.aggregation_mode)):
+        #            # check if the aggregation mode is global_add_pool
+        #            if self.aggregation_mode[j] == global_add_pool:
+        #                start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key])/1000) 
+        #            else:
+        #                start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))
+        #    else:
+        #        start_representations.append(self.aggregation_mode(x_dict[key], batch_dict[key]))
+#
+
+        x = {}
+
+       ########################################
+        #pre processing
+        for i in range(len(self.pre_processing_lin_layers)):
+            for node_type in self.node_types:
+                x[node_type] = F.relu(self.pre_processing_batch_norm[i][node_type](self.pre_processing_lin_layers[i][node_type](x_dict[node_type]))) #.relu()
+        #########################################
+        #########################################
+        # gnn convolutions
+        for i, conv in enumerate(self.convs): # vs self.convs
+            # apply the conv and then add the skip connections
+
+            x_old = x.copy()
+            x = conv(x, edge_index_dict)
+            if self.conv_aggr == "cat":
+                x = self.cat_comps[i](x)
+
+            for node_type in self.node_types:
+                x[node_type] = x[node_type] + x_old[node_type] # skip connection
+                #relu after skip connection
+                x[node_type] = F.relu(x[node_type])#.relu()
+
+        #########################################
+        ########################################
+        #pre processing
+        for i in range(len(self.post_processing_lin_layers)):
+            for node_type in self.node_types:
+                x[node_type] = self.post_processing_batch_norm[i][node_type](self.post_processing_lin_layers[i][node_type](x[node_type]))
+
+            # relu if not last layer
+            if i != len(self.post_processing_lin_layers) - 1:
+                for node_type in self.node_types:
+                    x[node_type] = F.relu(x[node_type])#.relu()
+        #########################################
+
+        self.final_conv_acts_1 = x["graph_1"]
+        self.final_conv_acts_2 = x["graph_2"]
+
+        if grads:
+            # register hooks for the gradients
+            self.final_conv_acts_1.register_hook(self.activations_hook_1)
+            self.final_conv_acts_2.register_hook(self.activations_hook_2)
+
+
+
+
+
+
+
+
+
 
         # for each node type, aggregate over all nodes of that type
         type_specific_representations = []
-        for key, x in x_dict.items():
+        for key in x.keys():
             if isinstance(self.aggregation_mode, list):
                 for j in range(len(self.aggregation_mode)):
                     # check if the aggregation mode is global_add_pool
                     if self.aggregation_mode[j] == global_add_pool:
-                        type_specific_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key])/1000) 
+                        type_specific_representations.append(self.aggregation_mode[j](x[key], batch_dict[key])/1000) 
                     else:
-                        type_specific_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))
+                        type_specific_representations.append(self.aggregation_mode[j](x[key], batch_dict[key]))
             else:
-                type_specific_representations.append(self.aggregation_mode(x_dict[key], batch_dict[key]))
+                type_specific_representations.append(self.aggregation_mode(x[key], batch_dict[key]))
 
-            #rep = self.aggregation_mode(x_dict[key], batch_dict[key])
+            #rep = self.aggregation_mode(x[key], batch_dict[key])
             #type_specific_representations.append(rep)
 
 
         x = torch.cat(type_specific_representations, dim=1)  
+        #x_start = torch.cat(start_representations, dim=1)
+
+        #x = torch.cat([x_start, x_end], dim=1)
+
         x = F.dropout(x, p=self.dropout, training = self.training)
 
+        return self.lin3(F.relu(self.lin2(F.relu(self.lin1(x)))))
 
-        return self.lin3(self.lin2(self.lin1(x).relu()).relu())
+        #return self.lin3(self.lin2(self.lin1(x).relu()).relu())
 
 
         
@@ -136,17 +214,17 @@ class GNN_global_node(torch.nn.Module):
         # copy the input dict
         x_dict = x_dict.copy()
         # require gradients for the input
-        if grads:
-            for key in x_dict.keys():
-                x_dict[key].requires_grad = True
-
-        self.start_conv_acts_1 = x_dict["graph_1"]
-        self.start_conv_acts_2 = x_dict["graph_2"]
-
-        if grads:
-            # register hooks for the gradients
-            self.start_conv_acts_1.register_hook(self.activations_hook_start_1)
-            self.start_conv_acts_2.register_hook(self.activations_hook_start_2)
+        #if grads:
+        #    for key in x_dict.keys():
+        #        x_dict[key].requires_grad = True
+#
+        #self.start_conv_acts_1 = x_dict["graph_1"]
+        #self.start_conv_acts_2 = x_dict["graph_2"]
+#
+        #if grads:
+        #    # register hooks for the gradients
+        #    self.start_conv_acts_1.register_hook(self.activations_hook_start_1)
+        #    self.start_conv_acts_2.register_hook(self.activations_hook_start_2)
 
 
         ########################################
@@ -207,3 +285,50 @@ class GNN_global_node(torch.nn.Module):
 
     def activations_hook_start_2(self, grad):
         self.start_conv_grads_2 = grad
+
+
+
+def conv_12(hidden_channels, conv_aggr, hetero_conns):
+    if hetero_conns:
+        conv = HeteroConv({
+            ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
+            ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
+            ('graph_1', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+            ('graph_2', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+            #('global', 'to', 'graph_1'): GATConv((-1,-1), hidden_channels, add_self_loops=False), #
+            #('global', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False), #
+            #('global', 'to', 'global'): GCNConv(-1,hidden_channels), 
+        }, aggr=conv_aggr)
+    else:
+        conv = HeteroConv({
+            ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
+            ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
+            #('global', 'to', 'global'): GCNConv(-1,hidden_channels), 
+        }, aggr=conv_aggr)
+
+    return conv
+    
+
+def conv_123(hidden_channels, conv_aggr, hetero_conns):
+    if hetero_conns:
+        conv = HeteroConv({
+            ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels),
+            ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
+            ('graph_1', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+            ('graph_1', 'to', 'faz'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+            ('faz', 'to', 'graph_2'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+            ('graph_2', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+            ('faz', 'to', 'faz'): GCNConv(-1, hidden_channels), 
+            ('faz', 'rev_to', 'graph_1'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+            ('graph_2', 'rev_to', 'faz'): GATConv((-1, -1), hidden_channels, add_self_loops=False),
+
+        }, aggr=conv_aggr)
+    else:
+        conv = HeteroConv({
+            ('graph_1', 'to', 'graph_1'): GCNConv(-1, hidden_channels),
+            ('graph_2', 'to', 'graph_2'): GCNConv(-1, hidden_channels),
+            ('faz', 'to', 'faz'): GCNConv(-1, hidden_channels),  
+        }, aggr=conv_aggr)
+
+        
+    return conv
