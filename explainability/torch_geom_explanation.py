@@ -2,7 +2,7 @@
 
 
 
-def visualize_feature_importance(explanation, path, features_label_dict, top_k = 100):
+def visualize_feature_importance(explanation, path, features_label_dict, top_k = 100, abs = False):
     """
     wrapper for the pytorch geom function, since it does not include tight layout
     """
@@ -10,23 +10,36 @@ def visualize_feature_importance(explanation, path, features_label_dict, top_k =
     import pandas as pd
     import torch
 
-    score = torch.cat([node_mask.sum(dim=0) for node_mask in explanation.node_mask_dict.values()], dim=0)
-    score = score.cpu().detach().numpy()
+    # take abs for features in node mask to take into account negative values
+    abs_dict = {}
+    for key in explanation.node_mask_dict.keys():
+        if abs:
+            abs_dict[key] = torch.abs(explanation.node_mask_dict[key])
+        else:
+            abs_dict[key] = torch.abs(explanation.node_mask_dict[key])
+
+    # how can the features still be negative?
+
+
+    score = torch.cat([node_mask.sum(dim=0) for node_mask in abs_dict.values()], dim=0) # explanation.node_mask_dict
+    score = score.cpu().numpy() # .detach()
+    #print(score)
+    node_typeto_proper_name = {"graph_1": "Vessel", "graph_2": "ICP Region", "faz": "FAZ"}
     all_feat_labels = []
     for node_type in explanation.node_mask_dict.keys():
         all_feat_labels += [
-            f'{node_type}#{label}' for label in features_label_dict[node_type]
+            f'{node_typeto_proper_name[node_type]}#{label}' for label in features_label_dict[node_type]
         ]
     df = pd.DataFrame({'score': score}, index=all_feat_labels)
     df = df.sort_values('score', ascending=False)
-    df = df.round(decimals=3)
+    #df = df.round(decimals=3)
     df = df.head(top_k)
     ax = df.plot(
            kind='barh',
            figsize=(10, 7),
 #              title=title,
            ylabel='Feature label',
-           xlim=[0, float(df['score'].max()) + 0.3],
+           #xlim=[0, float(df['score'].max()) + 0.3*float(df['score'].max())],
            legend=False,
        )
     plt.gca().invert_yaxis()
@@ -36,7 +49,7 @@ def visualize_feature_importance(explanation, path, features_label_dict, top_k =
 
 
 
-def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold = 0.0, edge_threshold = 0.0):
+def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold = 0.0, edge_threshold = 0.0, edges = True):
 
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -62,20 +75,33 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
     #print(explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1))
 
     if threshold == "adaptive":
-        max_g1 = explanation_graph.node_mask_dict[graph_1_name].sum(dim=-1).max()
-        max_g2 = explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1).max()
-        max_val = max(max_g1, max_g2)
+        #max_g1 = explanation_graph.node_mask_dict[graph_1_name].sum(dim=-1).max()
+        #max_g2 = explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1).max()
+        #max_val = max(max_g1, max_g2)
 
-        threshold = max_val * 0.01
+        total_grad = explanation_graph.node_mask_dict[graph_1_name].sum() + explanation_graph.node_mask_dict[graph_2_name].sum()
+        avg_grad = total_grad / (explanation_graph.node_mask_dict[graph_1_name].shape[0] + explanation_graph.node_mask_dict[graph_2_name].shape[0])
+
+
+        threshold = avg_grad #max_val * 0.01
+        print("threshold", threshold)
     
-    if edge_threshold == "adaptive":
-        max_g1 = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_1_name].max()
-        max_g2 = explanation_graph.edge_mask_dict[graph_2_name, "to", graph_2_name].max()
-        max_g12 = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name].max()
-        max_g21 = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name].max()
-        max_val = max(max_g1, max_g2, max_g12, max_g21)
+    if edges:
+        if edge_threshold == "adaptive":
+            #max_g1 = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_1_name].max()
+            #max_g2 = explanation_graph.edge_mask_dict[graph_2_name, "to", graph_2_name].max()
+            #max_g12 = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name].max()
+            #max_g21 = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name].max()
+            #max_val = max(max_g1, max_g2, max_g12, max_g21)
 
-        edge_threshold = max_val * 0.01
+            total_grad = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_1_name].sum() + explanation_graph.edge_mask_dict[graph_2_name, "to", graph_2_name].sum() + explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name].sum() + explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name].sum()
+            avg_grad = total_grad / (explanation_graph.edge_mask_dict[graph_1_name, "to", graph_1_name].shape[0] + explanation_graph.edge_mask_dict[graph_2_name, "to", graph_2_name].shape[0] + explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name].shape[0] + explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name].shape[0])
+
+
+            print("edge_threshold", avg_grad)
+            edge_threshold = max(avg_grad, 0.05*threshold) # max_val * 0.01
+            print("edge_threshold", edge_threshold)
+            
         
 
 
@@ -89,32 +115,34 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
     het_graph2_rel_pos = het_graph2_pos[het_graph2_rel_pos]
 
 
-    ax.scatter(het_graph1_rel_pos[:,1], het_graph1_rel_pos[:,0], zorder = 2, s = 8)
-    ax.scatter(het_graph2_rel_pos[:,1], het_graph2_rel_pos[:,0], zorder = 2, s = 12, marker = "s")
+    ax.scatter(het_graph1_rel_pos[:,1], het_graph1_rel_pos[:,0], zorder = 2, s = 8, alpha= 0.9)
+    ax.scatter(het_graph2_rel_pos[:,1], het_graph2_rel_pos[:,0], zorder = 2, s = 12, alpha= 0.9, marker = "s")
 
-    het_graph1_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_1_name] > edge_threshold
-    het_graph2_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "to", graph_2_name] > edge_threshold
+    if edges:
 
-    het_graph1_rel_edges = het_graph1_rel_edges.cpu().detach().numpy()
-    het_graph2_rel_edges = het_graph2_rel_edges.cpu().detach().numpy()
+        het_graph1_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_1_name] > edge_threshold
+        het_graph2_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "to", graph_2_name] > edge_threshold
 
-    het_graph12_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name] > edge_threshold
-    het_graph21_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name] > edge_threshold
+        het_graph1_rel_edges = het_graph1_rel_edges.cpu().detach().numpy()
+        het_graph2_rel_edges = het_graph2_rel_edges.cpu().detach().numpy()
 
-    for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_1_name].edge_index.cpu().detach().numpy().T):
-        if het_graph1_rel_edges[i]:
-            ax.plot(het_graph1_pos[edge,1], het_graph1_pos[edge,0], c="blue",linewidth=1, alpha=0.5, zorder = 1)
+        het_graph12_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name] > edge_threshold
+        het_graph21_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name] > edge_threshold
 
-    for i, edge in enumerate(hetero_graph[graph_2_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
-        if het_graph2_rel_edges[i]:
-            ax.plot(het_graph2_pos[edge,1], het_graph2_pos[edge,0], c="red",linewidth=1, alpha=0.5, zorder = 1)
+        for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_1_name].edge_index.cpu().detach().numpy().T):
+            if het_graph1_rel_edges[i]:
+                ax.plot(het_graph1_pos[edge,1], het_graph1_pos[edge,0], c="blue",linewidth=1, alpha=0.5, zorder = 1)
 
-    for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
-        if het_graph12_rel_edges[i] or het_graph21_rel_edges[i]:
-            x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
-            y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
+        for i, edge in enumerate(hetero_graph[graph_2_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
+            if het_graph2_rel_edges[i]:
+                ax.plot(het_graph2_pos[edge,1], het_graph2_pos[edge,0], c="red",linewidth=1, alpha=0.5, zorder = 1)
 
-            ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
+        for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
+            if het_graph12_rel_edges[i] or het_graph21_rel_edges[i]:
+                x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
+                y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
+
+                ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
 
 
 
