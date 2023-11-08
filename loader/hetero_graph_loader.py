@@ -2,6 +2,7 @@ import os
 import re
 import pandas as pd
 import torch
+import pickle
 from torch_geometric.data import Data, HeteroData
 from torch_geometric.transforms import ToUndirected, RemoveIsolatedNodes
 from sklearn.model_selection import train_test_split
@@ -19,6 +20,7 @@ class HeteroGraphLoaderTorch:
                  line_graph_1 = False, 
                  line_graph_2 = False, 
                  class_dict = None, 
+                 pickle_file = None
                  ):
 
         self.graph_path_1 = graph_path_1
@@ -33,27 +35,63 @@ class HeteroGraphLoaderTorch:
 
         if self.label_file is not None:
             self.label_data = self.read_labels(label_file)
+
+        if pickle_file is None:
         
-        self.full_graphs_1 = self.read_graphs(graph_path_1)
-        self.full_graphs_2 = self.read_graphs(graph_path_2)
-        self.hetero_edges_12 = self.read_hetero_edges(hetero_edges_path_12)
+            self.full_graphs_1 = self.read_graphs(graph_path_1)
+            self.full_graphs_2 = self.read_graphs(graph_path_2)
+            self.hetero_edges_12 = self.read_hetero_edges(hetero_edges_path_12)
 
-        if line_graph_1:
-            self.line_graphs_1 = self.line_graphs(self.full_graphs_1)
+            if line_graph_1:
+                self.line_graphs_1 = self.line_graphs(self.full_graphs_1)
+            else:
+                self.line_graphs_1 = None
+
+            if line_graph_2:
+                self.line_graphs_2 = self.line_graphs(self.full_graphs_2)
+            else:
+                self.line_graphs_2 = None
+
+            # assign line graph if exists else full graph
+            graphs_1 = self.line_graphs_1 if self.line_graphs_1 is not None else self.full_graphs_1 
+            graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
+
+            self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
+            self.hetero_graph_list = list(self.hetero_graphs.values())
+
+
         else:
-            self.line_graphs_1 = None
+            try: 
+                with open(pickle_file, "rb") as f:
+                    self.hetero_graphs = pickle.load(f)
+                self.hetero_graph_list = list(self.hetero_graphs.values())
+            except FileNotFoundError:
+                print("Pickle file not found, creating new one")
+                self.full_graphs_1 = self.read_graphs(graph_path_1)
+                self.full_graphs_2 = self.read_graphs(graph_path_2)
+                self.hetero_edges_12 = self.read_hetero_edges(hetero_edges_path_12)
 
-        if line_graph_2:
-            self.line_graphs_2 = self.line_graphs(self.full_graphs_2)
-        else:
-            self.line_graphs_2 = None
+                if line_graph_1:
+                    self.line_graphs_1 = self.line_graphs(self.full_graphs_1)
+                else:
+                    self.line_graphs_1 = None
 
-        # assign line graph if exists else full graph
-        graphs_1 = self.line_graphs_1 if self.line_graphs_1 is not None else self.full_graphs_1 
-        graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
+                if line_graph_2:
+                    self.line_graphs_2 = self.line_graphs(self.full_graphs_2)
+                else:
+                    self.line_graphs_2 = None
 
-        self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
-        self.hetero_graph_list = list(self.hetero_graphs.values())
+                # assign line graph if exists else full graph
+                graphs_1 = self.line_graphs_1 if self.line_graphs_1 is not None else self.full_graphs_1 
+                graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
+
+                self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
+                self.hetero_graph_list = list(self.hetero_graphs.values())
+
+                with open(pickle_file, "wb") as f:
+                    pickle.dump(self.hetero_graphs, f)
+
+
 
     def update_class(self, class_dict):
 
