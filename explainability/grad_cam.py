@@ -5,7 +5,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 
-def grad_cam_data(model, data, target_class, scale = False, relu = False, start = False):
+def grad_cam_data(model, data, target_class, scale = False, relu = False, start = False, abs = False):
     # Perform forward pass for the target class
     model.eval()
     pos_dict = {}
@@ -54,7 +54,7 @@ def grad_cam_data(model, data, target_class, scale = False, relu = False, start 
         return heat_maps
 
 
-def grad_cam_heat_map(model, start = False, relu = False):
+def grad_cam_heat_map(model, start = False, relu = False, abs = False):
     # Compute Grad-CAM
 
     try:
@@ -72,6 +72,12 @@ def grad_cam_heat_map(model, start = False, relu = False):
         conv_grads_2 = model.final_conv_grads_2
         conv_acts_1 = model.final_conv_acts_1
         conv_acts_2 = model.final_conv_acts_2
+
+    # abs value of the gradients
+
+    if abs:
+        conv_grads_1 = torch.abs(conv_grads_1)
+        conv_grads_2 = torch.abs(conv_grads_2)
 
     alphas_1 = torch.mean(conv_grads_1, axis=0)
     alphas_2 = torch.mean(conv_grads_2, axis=0)
@@ -96,3 +102,4 @@ def grad_cam_heat_map(model, start = False, relu = False):
     node_heat_map["graph_2"] = torch.tensor(np.array(node_heat_map_2))
 
     return node_heat_map
+
