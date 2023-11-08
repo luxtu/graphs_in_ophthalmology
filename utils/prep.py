@@ -100,10 +100,16 @@ def hetero_graph_normalization_params(train_dataset):
     return node_mean_tensors, node_std_tensors
 
 def hetero_graph_normalization(dataset, node_mean_tensors, node_std_tensors):
+    import torch
+
+    for key in node_std_tensors.keys():
+        node_std_tensors[key] = torch.where(node_std_tensors[key] == 0, torch.ones_like(node_std_tensors[key]), node_std_tensors[key])
 
     for data in dataset:
         for key in data.x_dict.keys():
             data.x_dict[key] -=  node_mean_tensors[key]
+            # avoid division by zero
+            #data.x_dict[key] /= node_std_tensors[key] + 1e-8
             data.x_dict[key] /= node_std_tensors[key]
 
 
