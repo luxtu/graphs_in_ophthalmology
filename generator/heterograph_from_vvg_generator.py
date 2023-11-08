@@ -14,7 +14,7 @@ from loader import vvg_loader
 
 class HeterographFromVVGGenerator:
 
-    def __init__(self, seg_path, vvg_path, void_graph_save_path, hetero_edges_save_path, image_path = None ,debug = False):
+    def __init__(self, seg_path, vvg_path, void_graph_save_path, hetero_edges_save_path, faz_node = False, image_path = None ,debug = False, faz_node_save_path = None, faz_region_edges_save_path = None, faz_vessel_edges_save_path = None):
 
         self.seg_path = seg_path
         self.vvg_path = vvg_path
@@ -23,14 +23,26 @@ class HeterographFromVVGGenerator:
 
         # setting an image path will only influence node features
         self.image_path = image_path
-
+        self.faz_node = faz_node
         self.debug = debug
         self.force = False
+
+        # with a faz node
+        if self.faz_node:
+            self.faz_node_save_path = faz_node_save_path
+            self.faz_region_edges_save_path = faz_region_edges_save_path
+            self.faz_vessel_edges_save_path = faz_vessel_edges_save_path
 
     def check_existing_heterograph(self, idx_dict):
         # check if there is already a heterograph file stored with this index in the save path
         # if there is, return True, else return False
-        if os.path.exists(os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes" + ".csv")):
+
+        if self.faz_node:
+            file_name = os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes_faz_node" + ".csv")
+        else:
+            file_name = os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes" + ".csv")  
+
+        if os.path.exists(file_name): #os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes" + ".csv")):
             return True
         else:
             return False
@@ -135,10 +147,10 @@ class HeterographFromVVGGenerator:
         ## region properties don't make sense with extremely small regions, also they probably come from failed segmentation
         region_labels = measure.label(morphology.remove_small_holes(seg, area_threshold=5, connectivity=1).astype("uint8"), background=1)
 
+
         if self.debug:
             plt.imshow(region_labels)
-            #plt.show()
-
+            
         if self.image_path is not None:
             props = measure.regionprops_table(region_labels,intensity_image=image, 
                                               properties=('centroid',
@@ -171,27 +183,80 @@ class HeterographFromVVGGenerator:
                                                  'extent',
                                                  'axis_major_length',
                                                  'axis_minor_length'))
-        
-        df = pd.DataFrame(props)
+        df = pd.DataFrame(props)  
+        if self.faz_node:
+            # faz_region is the region with label at 600,600
+            faz_region_label = region_labels[600,600]
+            idx_y = 600
+            while faz_region_label == 0:
+                idx_y += 1
+                faz_region_label = region_labels[idx_y,600]
+
+            # find region in props with largest area
+            #pos = df["area"].idxmax()
+            #print(pos)
+#
+            #print(faz_region_label)
+            # create a dataframe with only the faz region
+            df_faz_node = df.iloc[faz_region_label-1]
+
+            # create a dataframe with all the other regions
+            df = df.drop(faz_region_label-1)
+
+            ## adjust labels of the regions
+            df.index = np.arange(len(df))
+
 
         try:
-            edge_index_df, edge_index_region_vessel_df = self.generate_edge_index(region_labels, vvg_file)
+            edge_index_df, edge_index_region_vessel_df, faz_region_df, faz_vessel_df  = self.generate_edge_index(region_labels, vvg_file)
         except json.decoder.JSONDecodeError:
             print("JSONDecodeError")
             return None
 
         if not self.debug:
-            df.to_csv(os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes" + ".csv"), sep = ";")
-            edge_index_df.to_csv(os.path.join(self.void_graph_save_path, str(idx_dict) + "_region_edges"+".csv"), sep = ";")
-            edge_index_region_vessel_df.to_csv(os.path.join(self.hetero_edges_save_path, str(idx_dict) + "_region_vessel_edges"+".csv"), sep = ";")
+
+            if self.faz_node:
+                region_node_file = os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes_faz_node" + ".csv")
+                region_edges_file = os.path.join(self.void_graph_save_path, str(idx_dict) + "_region_edges_faz_node"+".csv")
+                region_vessel_edges_file = os.path.join(self.hetero_edges_save_path, str(idx_dict) + "_region_vessel_edges_faz_node"+".csv")
+
+                faz_node_file = os.path.join(self.faz_node_save_path, str(idx_dict) + "_faz_node_faz_node"+".csv")
+                faz_region_edges_file = os.path.join(self.faz_region_edges_save_path, str(idx_dict) + "_faz_region_edges_faz_node"+".csv")
+                faz_region_vessel_edges_file = os.path.join(self.faz_vessel_edges_save_path, str(idx_dict) + "_faz_region_vessel_edges_faz_node"+".csv")
+
+                df_faz_node.to_csv(faz_node_file, sep = ";")
+                faz_region_df.to_csv(faz_region_edges_file, sep = ";")
+                faz_vessel_df.to_csv(faz_region_vessel_edges_file, sep = ";")
+            
+            else:
+                region_node_file = os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes" + ".csv")
+                region_edges_file = os.path.join(self.void_graph_save_path, str(idx_dict) + "_region_edges"+".csv")
+                region_vessel_edges_file = os.path.join(self.hetero_edges_save_path, str(idx_dict) + "_region_vessel_edges"+".csv")
+
+
+            df.to_csv(region_node_file, sep = ";")
+            edge_index_df.to_csv(region_edges_file, sep = ";")
+            edge_index_region_vessel_df.to_csv(region_vessel_edges_file, sep = ";")
         else:
             # plot the nodes
             plt.scatter(df["centroid-1"], df["centroid-0"], s = 8, c= "orange")
             # plot the connections between the nodes
             for id, edge in edge_index_df.iterrows():
+                #print(edge["node1id"], edge["node2id"])
                 plt.plot([df["centroid-1"][edge["node1id"]], df["centroid-1"][edge["node2id"]]], [df["centroid-0"][edge["node1id"]], df["centroid-0"][edge["node2id"]]], c = "black", linewidth = 0.5)
 
+            if self.faz_node:
+                plt.scatter(df_faz_node["centroid-1"], df_faz_node["centroid-0"], s = 12, c= "red")
+
+                faz_centroid_1 = df_faz_node["centroid-1"]
+                faz_centroid_0 = df_faz_node["centroid-0"]
+
+                # print edges to faz region, node1id is redundant because it is always the faz region
+                for id, edge in faz_region_df.iterrows():
+                    plt.plot([faz_centroid_1, df["centroid-1"][edge["node2id"]]], [faz_centroid_0, df["centroid-0"][edge["node2id"]]], c = "red", linewidth = 0.5)
+
             plt.show()
+            plt.close()
 
 
     def generate_edge_index(self, region_labels, vvg_file):
@@ -249,12 +314,79 @@ class HeterographFromVVGGenerator:
                             except KeyError:
                                 fail += 1
 
+        if self.faz_node:
+            # faz_region is the region with label at 600,600
+            faz_region = region_labels[600,600]
+            idx_y = 600
+            while faz_region == 0:
+                idx_y += 1
+                faz_region = region_labels[idx_y,600]
+
+            faz_region_neighbor_set = set()
+            faz_vessel_neighbor_set = set()
+
+            # extract all the edges that are connected to the faz region from the region_neighbor_set and the vessel_to_region_neighbor_set
+            # also remove the edges from the other sets
+            new_region_neighbor_set = set()
+            for edge in region_neighbor_set:
+                if edge[0] == faz_region-1 or edge[1] == faz_region-1:
+
+                    new_edge = (edge[0], edge[1]) if edge[0] == faz_region-1 else (edge[1], edge[0])
+                    faz_region_neighbor_set.add(new_edge)
+                else:
+                    new_region_neighbor_set.add(edge)
+            region_neighbor_set = new_region_neighbor_set
+
+            new_vessel_to_region_neighbor_set = set()
+            for edge in vessel_to_region_neighbor_set:
+                if edge[1] == faz_region-1:
+                    faz_vessel_neighbor_set.add(edge)
+                else:
+                    new_vessel_to_region_neighbor_set.add(edge)
+            vessel_to_region_neighbor_set = new_vessel_to_region_neighbor_set
+
+            # create a dataframe for the edge list where the first column is an ID column and the second and third column are the indices of the nodes connected by the edge
+
+            faz_region_df = pd.DataFrame(faz_region_neighbor_set, columns=["node1id", "node2id"])
+            faz_vessel_df = pd.DataFrame(faz_vessel_neighbor_set, columns=["node1id", "node2id"])
+
+            # adjust the indices of the edges in the faz_region_df and the faz_vessel_df
+            # ids larger than the faz region are shifted by -1
+
+            faz_region_df["node1id"] = faz_region_df["node1id"].apply(lambda x: x-1 if x > faz_region-1 else x)
+            faz_region_df["node2id"] = faz_region_df["node2id"].apply(lambda x: x-1 if x > faz_region-1 else x)
+
+            # vessel to region only regions and not vessels are shifted by -1
+            faz_vessel_df["node2id"] = faz_vessel_df["node2id"].apply(lambda x: x-1 if x > faz_region-1 else x)
+
+
+            region_region_df = pd.DataFrame(region_neighbor_set, columns=["node1id", "node2id"])
+            vessel_region_df = pd.DataFrame(vessel_to_region_neighbor_set, columns=["node1id", "node2id"])
+
+            # adjust the indices of the edges in the region_region_df and the vessel_region_df
+            # ids larger than the faz region are shifted by -1
+
+            region_region_df["node1id"] = region_region_df["node1id"].apply(lambda x: x-1 if x > faz_region-1 else x)
+            region_region_df["node2id"] = region_region_df["node2id"].apply(lambda x: x-1 if x > faz_region-1 else x)
+
+            # vessel to region only regions and not vessels are shifted by -1
+            vessel_region_df["node2id"] = vessel_region_df["node2id"].apply(lambda x: x-1 if x > faz_region-1 else x)
+        
+
+        else:
+            faz_region_df = None
+            faz_vessel_df = None
+
+            region_region_df = pd.DataFrame(region_neighbor_set, columns=["node1id", "node2id"])
+            vessel_region_df = pd.DataFrame(vessel_to_region_neighbor_set, columns=["node1id", "node2id"])
+            
+
         print(len(vessel_to_region_neighbor_set))
         print(success, fail)
 
-        # create a dataframe for the edge list where the first column is an ID column and the second and third column are the indices of the nodes connected by the edge
 
-        return pd.DataFrame(region_neighbor_set, columns=["node1id", "node2id"]), pd.DataFrame(vessel_to_region_neighbor_set, columns=["node1id", "node2id"])
+        # create a dataframe for the edge list where the first column is an ID column and the second and third column are the indices of the nodes connected by the edge
+        return region_region_df, vessel_region_df, faz_region_df, faz_vessel_df
 
 
     def generate_skel_labels(self, vvg_file, seg_shape):
