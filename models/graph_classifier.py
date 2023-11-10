@@ -54,15 +54,17 @@ class graphClassifierHetero():
     def train(self, loader):
         self.model.train()
         cum_loss = 0
+        raw_out = []
+        y_out = []
         size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
         for data in loader:
-            data.to(self.device)
-            pos_dict = {}
+            #data.to(self.device)
+            #pos_dict = {}
             #print(data.y)
-            for key in ["graph_1", "graph_2"]:
-                pos_dict[key] = data[key].pos
+            #for key in ["graph_1", "graph_2"]:
+            #    pos_dict[key] = data[key].pos
             #out_dis, out_stage = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression)  # Perform a single forward pass.
-            out =  self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression)  # Perform a single forward pass.
+            out =  self.model(data.x_dict, data.edge_index_dict, data.batch_dict, regression =self.regression)  # Perform a single forward pass. #  pos_dict = pos_dict, 
             #print(out.shape)
             #print(data.y.shape)
             loss = self.lossFunc(out, data.y)
@@ -71,8 +73,14 @@ class graphClassifierHetero():
             self.optimizer.step()  # Update parameters based on gradients.
             self.optimizer.zero_grad()  # Clear gradients.
             cum_loss += loss.item()
+            raw_out.append(out.cpu().detach().numpy())
+            y_out.append(data.y.cpu().detach().numpy())
+        
+        #raw_out)
+        pred = np.concatenate(raw_out, axis = 0)
+        y = np.concatenate(y_out, axis = 0)
         self.scheduler.step()
-        return cum_loss/size_data_set
+        return cum_loss/size_data_set, pred, y
 
 
     @torch.no_grad()
