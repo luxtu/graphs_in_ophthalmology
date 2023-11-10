@@ -39,10 +39,9 @@ sweep_configuration = {
         "class_weights": {"values": ["unbalanced", "balanced", "balanced_weak"]}, # "balanced", 
         "dataset": {"values": ["DCP"]}, #, "DCP"
         "regression": {"values": [False]},
-        "homogeneous_conv": {"values": [GATConv, SAGEConv, GraphConv, GCNConv]},
-        "heterogeneous_conv": {"values": [GATConv, SAGEConv, GraphConv]},
-        "activation": {"values": [torch.nn.functional.relu, torch.nn.functional.leaky_relu, torch.nn.functional.elu]},
-
+        "homogeneous_conv": {"values": ["gat", "sage", "graph", "gcn"]},
+        "heterogeneous_conv": {"values": ["gat", "sage", "graph"]},
+        "activation": {"values": ["relu", "leaky", "elu"]},
     },
 }
 
@@ -152,6 +151,10 @@ num_classes = class_weights.shape[0]
 node_types = ["graph_1", "graph_2"]
 
 agg_mode_dict = {"mean": global_mean_pool, "max": global_max_pool, "add": global_add_pool, "add_max": [global_add_pool, global_max_pool], "max_mean": [global_max_pool, global_mean_pool], "add_mean": [global_add_pool, global_mean_pool]}
+homogeneous_conv_dict = {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv, "gcn" : GCNConv}
+heterogeneous_conv_dict: {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv}
+activation_dict: {"relu":torch.nn.functional.relu, "leaky" : torch.nn.functional.leaky_relu, "elu":torch.nn.functional.elu}
+
 
 train_dataset.to(device)
 test_dataset.to(device)
@@ -182,9 +185,9 @@ def main():
                                                         conv_aggr = wandb.config.conv_aggr,
                                                         hetero_conns = wandb.config.hetero_conns,
                                                         #meta_data = train_dataset[0].metadata())
-                                                        homogeneous_conv= wandb.config.homogeneous_conv,
-                                                        heterogeneous_conv= wandb.config.heterogeneous_conv,
-                                                        activation= wandb.config.activation,
+                                                        homogeneous_conv= homogeneous_conv_dict[wandb.config.homogeneous_conv],
+                                                        heterogeneous_conv= heterogeneous_conv_dict[wandb.config.heterogeneous_conv],
+                                                        activation= activation_dict[wandb.config.activation],
                                                         )
 
     # create data loaders for training and test set
