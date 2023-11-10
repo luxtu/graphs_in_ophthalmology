@@ -16,7 +16,7 @@ def visualize_feature_importance(explanation, path, features_label_dict, top_k =
         if abs:
             abs_dict[key] = torch.abs(explanation.node_mask_dict[key])
         else:
-            abs_dict[key] = torch.abs(explanation.node_mask_dict[key])
+            abs_dict[key] = explanation.node_mask_dict[key]
 
     # how can the features still be negative?
 
@@ -31,7 +31,9 @@ def visualize_feature_importance(explanation, path, features_label_dict, top_k =
             f'{node_typeto_proper_name[node_type]}#{label}' for label in features_label_dict[node_type]
         ]
     df = pd.DataFrame({'score': score}, index=all_feat_labels)
-    df = df.sort_values('score', ascending=False)
+    # sort by absolute value
+    #df = df.sort_values('score', ascending=False)
+    df.reindex(df.abs().sort_values('score', ascending=False).index)
     #df = df.round(decimals=3)
     df = df.head(top_k)
     ax = df.plot(
