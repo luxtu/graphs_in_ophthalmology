@@ -191,3 +191,12 @@ def calculate_node_degrees(edge_index, num_nodes, num_nodes_2=None):
         degrees += torch.bincount(edge_index[1], minlength= num_nodes)
 
         return degrees
+    
+
+def remove_label_noise(dataset, label_noise_dict):
+
+    for key in label_noise_dict.keys():
+        for idx in label_noise_dict[key]:
+            dataset.hetero_graphs.pop(idx)
+
+    dataset.hetero_graph_list = list(dataset.hetero_graphs.values())
