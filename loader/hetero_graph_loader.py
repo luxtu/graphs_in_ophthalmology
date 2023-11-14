@@ -11,6 +11,7 @@ class HeteroGraphLoaderTorch:
 
     octa_dr_dict = {"Healthy": 0, "DM": 1, "PDR": 2, "Early NPDR": 3, "Late NPDR": 4}
 
+
     def __init__(self, 
                  graph_path_1, 
                  graph_path_2, 
@@ -57,6 +58,8 @@ class HeteroGraphLoaderTorch:
             graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
 
             self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
+            for key, value in self.hetero_graphs.items():
+                value.graph_id = key
             self.hetero_graph_list = list(self.hetero_graphs.values())
 
 
@@ -64,7 +67,12 @@ class HeteroGraphLoaderTorch:
             try: 
                 with open(pickle_file, "rb") as f:
                     self.hetero_graphs = pickle.load(f)
+                # store index of the graphs within the graphs
+                for key, value in self.hetero_graphs.items():
+                    value.graph_id = key
                 self.hetero_graph_list = list(self.hetero_graphs.values())
+
+
             except FileNotFoundError:
                 print("Pickle file not found, creating new one")
                 self.full_graphs_1 = self.read_graphs(graph_path_1)
@@ -86,6 +94,8 @@ class HeteroGraphLoaderTorch:
                 graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
 
                 self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
+                for key, value in self.hetero_graphs.items():
+                    value.graph_id = key
                 self.hetero_graph_list = list(self.hetero_graphs.values())
 
                 with open(pickle_file, "wb") as f:
