@@ -12,6 +12,8 @@ import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 import time
 
+
+from torch_geometric.nn import GCNConv, SAGEConv, GATConv
 from gnn_explainer import hetero_gnn_explainer
 
 from sklearn.metrics import roc_auc_score
@@ -28,22 +30,25 @@ torch.cuda.empty_cache()
 
 # Define sweep config
 sweep_config_dict = {
-        "batch_size": 32, # 48 works well
+        "batch_size": 16, # 48 works well
         "epochs": 100,
-        "lr": 0.00232,
+        "lr": 0.0232,
         "weight_decay": 0.008261,
         "hidden_channels": 32,
         "dropout":  0.2, # 0.1 works well 
         "num_layers":  3,
-        "aggregation_mode":  "mean", # combined
-        "pre_layers": 3,
-        "post_layers": 3,
+        "aggregation_mode":  "max", # combined
+        "pre_layers": 2,
+        "post_layers": 2,
         "batch_norm": False,
         "hetero_conns": True, # False
-        "conv_aggr": "max", # cat, sum, mean # cat works well
+        "conv_aggr": "mean", # cat, sum, mean # cat works well
         "faz_node": False,
-        "class_weights": "balanced", 
-        "dataset": "SCP"} 
+        "global_node": False,
+        "homogeneous_conv": SAGEConv,
+        "heterogeneous_conv": SAGEConv,
+        "class_weights": "balanced",  
+        "dataset": "DCP"} 
 
 sweep_config = SimpleNamespace(**sweep_config_dict)
 
@@ -140,8 +145,8 @@ prep.hetero_graph_imputation(test_dataset)
 prep.add_node_features(train_dataset, ["graph_1", "graph_2"])
 prep.add_node_features(test_dataset, ["graph_1", "graph_2"])
 
-#prep.add_global_node(train_dataset)
-#prep.add_global_node(test_dataset)
+prep.add_global_node(train_dataset)
+prep.add_global_node(test_dataset)
 
 
 node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(train_dataset)
@@ -157,24 +162,31 @@ node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(tra
 prep.hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
 prep.hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)
 
+# remove label noise, samples to exclude are stored in label_noise.json
+with open("label_noise.json", "r") as file:
+    label_noise_dict = json.load(file)
+prep.remove_label_noise(train_dataset, label_noise_dict)
+
+
+
 with open("label_dict.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
-eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
-                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "equivalent_diameter"]}
-eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
-                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "centroid-0", "centroid-1", "feret_diameter_max", "equivalent_diameter", "orientation"]}
-# get positions of features to eliminate and remove them from the feature label dict and the graphs
-for key in eliminate_features.keys():
-    for feat in eliminate_features[key]:
-        idx = features_label_dict[key].index(feat)
-        features_label_dict[key].remove(feat)
-        for data in train_dataset:
-            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
-        for data in test_dataset:
-            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+#eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+#                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "equivalent_diameter"]}
+#eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+#                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "centroid-0", "centroid-1", "feret_diameter_max", "equivalent_diameter", "orientation","solidity"]}
+## get positions of features to eliminate and remove them from the feature label dict and the graphs
+#for key in eliminate_features.keys():
+#    for feat in eliminate_features[key]:
+#        idx = features_label_dict[key].index(feat)
+#        features_label_dict[key].remove(feat)
+#        for data in train_dataset:
+#            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+#        for data in test_dataset:
+#            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
 
 
 max_nodes = np.max([graph.num_nodes for graph in train_dataset] + [graph.num_nodes for graph in test_dataset])
@@ -186,7 +198,7 @@ train_labels = [int(data.y[0]) for data in train_dataset]
 class_weights = prep.get_class_weights(train_labels, verbose=False)
 class_weights = torch.tensor(class_weights, device= device)
 
-#class_weights = class_weights ** 0.5
+weak_class_weights = class_weights ** 0.5
 
 
 train_dataset.to(device)
@@ -205,18 +217,22 @@ def main():
     torch.autograd.set_detect_anomaly(True)
 
     model = global_node_gnn.GNN_global_node(hidden_channels= sweep_config.hidden_channels,
-                                                         out_channels= num_classes, # irrelevant
-                                                         num_layers= sweep_config.num_layers, 
-                                                         dropout = sweep_config.dropout, 
-                                                         aggregation_mode= agg_mode_dict[sweep_config.aggregation_mode], 
-                                                         node_types = node_types,
-                                                         num_pre_processing_layers = sweep_config.pre_layers,
-                                                         num_post_processing_layers = sweep_config.post_layers,
-                                                         batch_norm = sweep_config.batch_norm,
-                                                         conv_aggr = sweep_config.conv_aggr,
-                                                         hetero_conns = sweep_config.hetero_conns,
-                                                         meta_data = train_dataset[0].metadata(),
-                                                         faz_node= sweep_config.faz_node,)
+                                                        out_channels= num_classes, # irrelevant
+                                                        num_layers= sweep_config.num_layers, 
+                                                        dropout = sweep_config.dropout, 
+                                                        aggregation_mode= agg_mode_dict[sweep_config.aggregation_mode], 
+                                                        node_types = node_types,
+                                                        num_pre_processing_layers = sweep_config.pre_layers,
+                                                        num_post_processing_layers = sweep_config.post_layers,
+                                                        batch_norm = sweep_config.batch_norm,
+                                                        conv_aggr = sweep_config.conv_aggr,
+                                                        hetero_conns = sweep_config.hetero_conns,
+                                                        homogeneous_conv = sweep_config.homogeneous_conv,
+                                                        heterogeneous_conv = sweep_config.heterogeneous_conv,
+                                                        meta_data = train_dataset[0].metadata(),
+                                                        faz_node= sweep_config.faz_node,
+                                                        global_node = sweep_config.global_node,
+                                                        )
     
     # create data loaders for training and test set
     train_loader = DataLoader(train_dataset, batch_size = sweep_config.batch_size, shuffle=True)
@@ -225,19 +241,22 @@ def main():
     # weigthings for imbalanced classes 
     balanced_loss = torch.nn.CrossEntropyLoss(class_weights)
     unbalanced_loss = torch.nn.CrossEntropyLoss()
+    weak_balanced_loss = torch.nn.CrossEntropyLoss(weak_class_weights)
     #reg_loss = torch.nn.SmoothL1Loss()
 
-    loss_dict = {"balanced": balanced_loss, "unbalanced": unbalanced_loss}
+    loss_dict = {"balanced": balanced_loss, "unbalanced": unbalanced_loss, "weak_balanced": weak_balanced_loss}
 
     classifier = graph_classifier.graphClassifierHetero(model, loss_dict[sweep_config.class_weights] , lr = sweep_config.lr, weight_decay =sweep_config.weight_decay, regression=False) #loss_dict[sweep_config.class_weights]
 
     best_val_bal_acc = 0
     best_mean_auc = 0
+    data_loss_dict = {}
 
     for epoch in range(1, sweep_config.epochs + 1):
 
         t0 = time.time()
-        loss, y_prob_train, y_true_train = classifier.train(train_loader)
+        
+        loss, y_prob_train, y_true_train, data_loss_dict = classifier.train(train_loader, data_loss_dict)
         print(f"Epoch: {epoch:03d}")
         t1 = time.time()
         print(f"Training time: {t1-t0:.4f}")
@@ -264,6 +283,15 @@ def main():
 
         if test_bal_acc > best_val_bal_acc:
             best_val_bal_acc = test_bal_acc
+
+        if epoch % 10 == 0:
+            # print the sample with top 20 highest average loss, with the loss and the label
+            print("Highest loss samples")
+            # sort the loss dict by loss, descending, loss is the value of the dict
+            sorted_loss_dict = {k: v for k, v in sorted(data_loss_dict.items(), key=lambda item: item[1], reverse=True)}
+            # print the top 20 samples
+            for key in list(sorted_loss_dict.keys())[:20]:
+                print(f"Sample: {key}, Loss: {sorted_loss_dict[key]:.4f}")
         
 
         if epoch == 100:  # kappa > 0.70 or epoch == 20
