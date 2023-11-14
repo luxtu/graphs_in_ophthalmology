@@ -18,6 +18,7 @@ class GNN_global_node(torch.nn.Module):
                  conv_aggr = "cat", 
                  hetero_conns = True, 
                  faz_node = False,
+                 global_node = False,
                  homogeneous_conv = GCNConv,
                  heterogeneous_conv = GATConv,
                  activation = F.relu
@@ -36,6 +37,10 @@ class GNN_global_node(torch.nn.Module):
             self.node_types = node_types + ["faz"] #+ ["global"]
         else:
             self.node_types = node_types
+
+        self.global_node = global_node
+        if self.global_node:
+            self.node_types = self.node_types + ["global"]
         
         self.conv_aggr = conv_aggr
         self.hetero_conns = hetero_conns
@@ -98,9 +103,9 @@ class GNN_global_node(torch.nn.Module):
         #self.han_convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             if self.faz_node:
-                conv = conv_123(self.hidden_channels, self.conv_aggr, self.hetero_conns, self.homogeneous_conv, self.heterogeneous_conv)
+                conv = self.conv_123(self.hidden_channels, self.conv_aggr, self.hetero_conns, self.homogeneous_conv, self.heterogeneous_conv)
             else:
-                conv = conv_12(self.hidden_channels, self.conv_aggr, self.hetero_conns, self.homogeneous_conv, self.heterogeneous_conv)
+                conv = self.conv_12(self.hidden_channels, self.conv_aggr, self.hetero_conns, self.homogeneous_conv, self.heterogeneous_conv)
 
             self.convs.append(conv)
             if self.conv_aggr == "cat":
@@ -119,17 +124,18 @@ class GNN_global_node(torch.nn.Module):
         #x_dict = self.forward_core(x_dict, edge_index_dict, grads = grads)
 
         ## for each node type, aggregate over all nodes of that type
-        #start_representations = []
-        #for key in x_dict.keys():
-        #    if isinstance(self.aggregation_mode, list):
-        #        for j in range(len(self.aggregation_mode)):
-        #            # check if the aggregation mode is global_add_pool
-        #            if self.aggregation_mode[j] == global_add_pool:
-        #                start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key])/1000) 
-        #            else:
-        #                start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))
-        #    else:
-        #        start_representations.append(self.aggregation_mode(x_dict[key], batch_dict[key]))
+        start_representations = []
+        for key in x_dict.keys():
+            if isinstance(self.aggregation_mode, list):
+                for j in range(len(self.aggregation_mode)):
+                    # check if the aggregation mode is global_add_pool
+                    if self.aggregation_mode[j] == global_add_pool:
+                        start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key])/1000) 
+                    else:
+                        start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))
+            else:
+                start_representations.append(self.aggregation_mode(x_dict[key], batch_dict[key]))
+            #start_representations.append(global_mean_pool(x_dict[key], batch_dict[key]))
 #
 
         x = {}
@@ -180,11 +186,6 @@ class GNN_global_node(torch.nn.Module):
 
 
 
-
-
-
-
-
         # for each node type, aggregate over all nodes of that type
         type_specific_representations = []
         for key in x.keys():
@@ -203,10 +204,11 @@ class GNN_global_node(torch.nn.Module):
 
 
         x = torch.cat(type_specific_representations, dim=1)  
-        #x_start = torch.cat(start_representations, dim=1)
-
-        #x = torch.cat([x_start, x_end], dim=1)
-
+        x_start = torch.cat(start_representations, dim=1)
+        # strong dropout for the start representation, avoid overrelaince on the start representation
+        x_start = F.dropout(x_start, p=0.5, training = self.training)
+        #x = x_start
+        x = torch.cat([x_start, x], dim=1)
         x = F.dropout(x, p=self.dropout, training = self.training)
 
         return self.lin3(self.activation(self.lin2(self.activation(self.lin1(x)))))
@@ -291,47 +293,60 @@ class GNN_global_node(torch.nn.Module):
 
 
 
-def conv_12(hidden_channels, conv_aggr, hetero_conns, homogeneous_conv, heterogeneous_conv):
-    if hetero_conns:
-        conv = HeteroConv({
-            ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
-            ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-            ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-            ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-            #('global', 'to', 'graph_1'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
-            #('global', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False), #
-            #('global', 'to', 'global'): homogeneous_conv(-1,hidden_channels), 
-        }, aggr=conv_aggr)
-    else:
-        conv = HeteroConv({
-            ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
-            ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-            #('global', 'to', 'global'): GCNConv(-1,hidden_channels), 
-        }, aggr=conv_aggr)
+    def conv_12(self, hidden_channels, conv_aggr, hetero_conns, homogeneous_conv, heterogeneous_conv):
+        if hetero_conns:
+            if self.global_node:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('global', 'to', 'graph_1'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+                    ('global', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False), #
+                    ('global', 'to', 'global'): homogeneous_conv(-1,hidden_channels), 
+                }, aggr=conv_aggr)
+            else:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                }, aggr=conv_aggr)                
+        else:
+            if self.global_node:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                    ('global', 'to', 'global'): homogeneous_conv(-1,hidden_channels), 
+                }, aggr=conv_aggr)
+            else:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                }, aggr=conv_aggr)
+        return conv
 
-    return conv
-    
 
-def conv_123(hidden_channels, conv_aggr, hetero_conns, homogeneous_conv, heterogeneous_conv):
-    if hetero_conns:
-        conv = HeteroConv({
-            ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
-            ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-            ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-            ('graph_1', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-            ('faz', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-            ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-            ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels), 
-            ('faz', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-            ('graph_2', 'rev_to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+    def conv_123(self, hidden_channels, conv_aggr, hetero_conns, homogeneous_conv, heterogeneous_conv):
+        if hetero_conns:
+            conv = HeteroConv({
+                ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                ('graph_1', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                ('faz', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels), 
+                ('faz', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                ('graph_2', 'rev_to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
 
-        }, aggr=conv_aggr)
-    else:
-        conv = HeteroConv({
-            ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
-            ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-            ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),  
-        }, aggr=conv_aggr)
+            }, aggr=conv_aggr)
+        else:
+            conv = HeteroConv({
+                ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),  
+            }, aggr=conv_aggr)
 
-        
-    return conv
+
+        return conv
