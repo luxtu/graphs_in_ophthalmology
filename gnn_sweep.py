@@ -51,7 +51,7 @@ sweep_id = wandb.sweep(sweep=sweep_configuration, project="graph_pathology")
 data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
 
 octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 3, "Early NPDR": 1, "Late NPDR": 2}
-label_names = ["Healthy/DM", "Early NPDR","Late NPDR", "PDR"]
+label_names = ["Healthy/DM", "Early NPDR", "Late NPDR", "PDR"]
 
 #vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
 #void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
