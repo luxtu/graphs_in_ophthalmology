@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from scipy.ndimage import gaussian_filter
 from torch.optim.lr_scheduler import ExponentialLR
 
 
@@ -51,11 +52,14 @@ class graphClassifierHetero():
         self.lossFunc = loss_func
         self.regression = regression
 
-    def train(self, loader):
+    def train(self, loader, data_loss_dict = None):
         self.model.train()
         cum_loss = 0
         raw_out = []
         y_out = []
+        if data_loss_dict is None:
+            data_loss_dict = {}
+
         size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
         for data in loader:
             #data.to(self.device)
@@ -67,12 +71,37 @@ class graphClassifierHetero():
             out =  self.model(data.x_dict, data.edge_index_dict, data.batch_dict, regression =self.regression)  # Perform a single forward pass. #  pos_dict = pos_dict, 
             #print(out.shape)
             #print(data.y.shape)
-            loss = self.lossFunc(out, data.y)
+
+            smooth_y = torch.nn.functional.one_hot(data.y, num_classes=4).float()
+            # gaussian filter the labels
+            # smooth_y = torch.nn.functional.gaussian_filter(smooth_y, sigma=1) 
+            # Convert PyTorch tensor to NumPy array
+            smooth_y_np = smooth_y.cpu().numpy()  # Assuming you're on CPU
+            # convert to float
+            smooth_y_np = smooth_y_np.astype(float)
+            # Apply Gaussian filter using scipy
+            smooth_y_filtered = gaussian_filter(smooth_y_np, sigma=0.45)
+            # Convert back to PyTorch tensor
+            smooth_y_filtered = torch.from_numpy(smooth_y_filtered).to(self.device)
+            # make sure its a float
+            smooth_y_filtered = smooth_y_filtered.float()
+
+            loss = self.lossFunc(out, smooth_y_filtered) # data.y)
             #loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
             loss.backward()  # Derive gradients.
             self.optimizer.step()  # Update parameters based on gradients.
             self.optimizer.zero_grad()  # Clear gradients.
             cum_loss += loss.item()
+
+
+            # get graph_ids 
+            ids = data.graph_id
+            for id in ids:
+                if id not in data_loss_dict:
+                    data_loss_dict[id] = 0
+                data_loss_dict[id]+= loss.item()
+
+
             raw_out.append(out.cpu().detach().numpy())
             y_out.append(data.y.cpu().detach().numpy())
         
@@ -80,7 +109,7 @@ class graphClassifierHetero():
         pred = np.concatenate(raw_out, axis = 0)
         y = np.concatenate(y_out, axis = 0)
         self.scheduler.step()
-        return cum_loss/size_data_set, pred, y
+        return cum_loss/size_data_set, pred, y, data_loss_dict
 
 
     @torch.no_grad()
