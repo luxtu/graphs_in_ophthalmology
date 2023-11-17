@@ -24,6 +24,8 @@ class HeteroGraphLoaderTorch:
                  pickle_file = None
                  ):
 
+        self.line_graphs_1_bool = line_graph_1
+        self.line_graphs_2_bool = line_graph_2
         self.graph_path_1 = graph_path_1
         self.graph_path_2 = graph_path_2
         self.hetero_edges_path_12 = hetero_edges_path_12
@@ -38,31 +40,7 @@ class HeteroGraphLoaderTorch:
             self.label_data = self.read_labels(label_file)
 
         if pickle_file is None:
-        
-            self.full_graphs_1 = self.read_graphs(graph_path_1)
-            self.full_graphs_2 = self.read_graphs(graph_path_2)
-            self.hetero_edges_12 = self.read_hetero_edges(hetero_edges_path_12)
-
-            if line_graph_1:
-                self.line_graphs_1 = self.line_graphs(self.full_graphs_1)
-            else:
-                self.line_graphs_1 = None
-
-            if line_graph_2:
-                self.line_graphs_2 = self.line_graphs(self.full_graphs_2)
-            else:
-                self.line_graphs_2 = None
-
-            # assign line graph if exists else full graph
-            graphs_1 = self.line_graphs_1 if self.line_graphs_1 is not None else self.full_graphs_1 
-            graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
-
-            self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
-            for key, value in self.hetero_graphs.items():
-                value.graph_id = key
-            self.hetero_graph_list = list(self.hetero_graphs.values())
-
-
+            self.init_hetero_graphs()
         else:
             try: 
                 with open(pickle_file, "rb") as f:
@@ -75,31 +53,34 @@ class HeteroGraphLoaderTorch:
 
             except FileNotFoundError:
                 print("Pickle file not found, creating new one")
-                self.full_graphs_1 = self.read_graphs(graph_path_1)
-                self.full_graphs_2 = self.read_graphs(graph_path_2)
-                self.hetero_edges_12 = self.read_hetero_edges(hetero_edges_path_12)
-
-                if line_graph_1:
-                    self.line_graphs_1 = self.line_graphs(self.full_graphs_1)
-                else:
-                    self.line_graphs_1 = None
-
-                if line_graph_2:
-                    self.line_graphs_2 = self.line_graphs(self.full_graphs_2)
-                else:
-                    self.line_graphs_2 = None
-
-                # assign line graph if exists else full graph
-                graphs_1 = self.line_graphs_1 if self.line_graphs_1 is not None else self.full_graphs_1 
-                graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
-
-                self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
-                for key, value in self.hetero_graphs.items():
-                    value.graph_id = key
-                self.hetero_graph_list = list(self.hetero_graphs.values())
-
+                self.init_hetero_graphs()
                 with open(pickle_file, "wb") as f:
                     pickle.dump(self.hetero_graphs, f)
+
+
+    def init_hetero_graphs(self):
+            self.full_graphs_1 = self.read_graphs(self.graph_path_1)
+            self.full_graphs_2 = self.read_graphs(self.graph_path_2)
+            self.hetero_edges_12 = self.read_hetero_edges(self.hetero_edges_path_12)
+
+            if self.line_graphs_1_bool:
+                self.line_graphs_1 = self.line_graphs(self.full_graphs_1)
+            else:
+                self.line_graphs_1 = None
+
+            if self.line_graphs_2_bool:
+                self.line_graphs_2 = self.line_graphs(self.full_graphs_2)
+            else:
+                self.line_graphs_2 = None
+
+            # assign line graph if exists else full graph
+            graphs_1 = self.line_graphs_1 if self.line_graphs_1 is not None else self.full_graphs_1 
+            graphs_2 = self.line_graphs_2 if self.line_graphs_2 is not None else self.full_graphs_2 
+
+            self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2)
+            for key, value in self.hetero_graphs.items():
+                value.graph_id = key
+            self.hetero_graph_list = list(self.hetero_graphs.values())
 
 
 
@@ -138,6 +119,8 @@ class HeteroGraphLoaderTorch:
             label_data = val
         elif self.mode == "debug":
             label_data = debug
+        elif self.mode == "all":
+            label_data = label_data
 
 
         label_dict = {}
