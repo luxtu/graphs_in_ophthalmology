@@ -13,12 +13,12 @@ from matplotlib.lines import Line2D
 import time
 
 
-from torch_geometric.nn import GCNConv, SAGEConv, GATConv
+from torch_geometric.nn import GCNConv, SAGEConv, GATConv, GraphConv
 from gnn_explainer import hetero_gnn_explainer
 
 from sklearn.metrics import roc_auc_score
 from utils import prep
-from explainability import grad_cam, torch_geom_explanation
+from explainability import grad_cam, torch_geom_explanation, explanation_in_raw_data
 from types import SimpleNamespace
 from graph_plotting import graph_2D
 from matplotlib import pyplot as plt
@@ -30,24 +30,24 @@ torch.cuda.empty_cache()
 
 # Define sweep config
 sweep_config_dict = {
-        "batch_size": 16, # 48 works well
+        "batch_size": 32, # 48 works well
         "epochs": 100,
-        "lr": 0.0232,
-        "weight_decay": 0.008261,
+        "lr": 0.00832,
+        "weight_decay": 0.005261,
         "hidden_channels": 32,
         "dropout":  0.2, # 0.1 works well 
         "num_layers":  3,
         "aggregation_mode":  "max", # combined
-        "pre_layers": 2,
+        "pre_layers": 1,
         "post_layers": 2,
-        "batch_norm": False,
+        "batch_norm": True,
         "hetero_conns": True, # False
-        "conv_aggr": "mean", # cat, sum, mean # cat works well
-        "faz_node": False,
+        "conv_aggr": "cat", # cat, sum, mean # cat works well
+        "faz_node": True,
         "global_node": False,
-        "homogeneous_conv": SAGEConv,
-        "heterogeneous_conv": SAGEConv,
-        "class_weights": "balanced",  
+        "homogeneous_conv": GCNConv, #SAGEConv, # GCNConv 
+        "heterogeneous_conv": GraphConv, #GATConv, #SAGEConv, # GATConv
+        "class_weights": "balanced",  #weak_balanced
         "dataset": "DCP"} 
 
 sweep_config = SimpleNamespace(**sweep_config_dict)
@@ -63,15 +63,15 @@ label_names = ["Healthy/DM", "Early NPDR","Late NPDR", "PDR"]
 
 vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
 label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
-void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
-hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
+#void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
+#hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
 
-#void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph_faz_node"
-#hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges_faz_node"
+void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph_faz_node"
+hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges_faz_node"
 
-#faz_node_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_nodes"
-#faz_region_edge_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_region_edges"
-#faz_vessel_edge_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_vessel_edges"
+faz_node_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_nodes"
+faz_region_edge_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_region_edges"
+faz_vessel_edge_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_vessel_edges"
 
 #vessel_graph_path = f"../{data_type}_vessel_graph"
 #void_graph_path = f"../{data_type}_void_graph"
@@ -79,60 +79,60 @@ hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_hete
 #label_file = "../labels.csv"
 
 
-#mode_train = "train"
-#train_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_train}_dataset_faz.pkl"
-#train_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
-#                                                        graph_path_2=void_graph_path,
-#                                                        graph_path_3=faz_node_path,
-#                                                        hetero_edges_path_12=hetero_edges_path,
-#                                                        hetero_edges_path_13=faz_vessel_edge_path,
-#                                                        hetero_edges_path_23=faz_region_edge_path,
-#                                                        mode = mode_train,
-#                                                        label_file = label_file, 
-#                                                        line_graph_1 =True, 
-#                                                        class_dict = octa_dr_dict,
-#                                                        pickle_file = train_pickle #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
-#                                                        )
-#mode_test = "test"
-#test_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_test}_dataset_faz.pkl"
-#test_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
-#                                                        graph_path_2=void_graph_path,
-#                                                        graph_path_3=faz_node_path,
-#                                                        hetero_edges_path_12=hetero_edges_path,
-#                                                        hetero_edges_path_13=faz_vessel_edge_path,
-#                                                        hetero_edges_path_23=faz_region_edge_path,
-#                                                        mode = mode_test,
-#                                                        label_file = label_file, 
-#                                                        line_graph_1 =True, 
-#                                                        class_dict = octa_dr_dict,
-#                                                        pickle_file = test_pickle # f"../{data_type}_{mode_test}_dataset_faz.pkl" #f"../{data_type}_{mode_test}_dataset_faz.pkl")
-#                                                        )
-
-
-
 mode_train = "train"
-train_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_train}_dataset.pkl"
-train_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(vessel_graph_path,
-                                                        void_graph_path,
-                                                        hetero_edges_path,
+train_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_train}_dataset_faz.pkl"
+train_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
+                                                        graph_path_2=void_graph_path,
+                                                        graph_path_3=faz_node_path,
+                                                        hetero_edges_path_12=hetero_edges_path,
+                                                        hetero_edges_path_13=faz_vessel_edge_path,
+                                                        hetero_edges_path_23=faz_region_edge_path,
                                                         mode = mode_train,
                                                         label_file = label_file, 
                                                         line_graph_1 =True, 
                                                         class_dict = octa_dr_dict,
-                                                        pickle_file = train_pickle
+                                                        pickle_file = train_pickle #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
                                                         )
-
 mode_test = "test"
-test_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_test}_dataset.pkl"
-test_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(vessel_graph_path,
-                                                        void_graph_path,
-                                                        hetero_edges_path,
+test_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_test}_dataset_faz.pkl"
+test_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
+                                                        graph_path_2=void_graph_path,
+                                                        graph_path_3=faz_node_path,
+                                                        hetero_edges_path_12=hetero_edges_path,
+                                                        hetero_edges_path_13=faz_vessel_edge_path,
+                                                        hetero_edges_path_23=faz_region_edge_path,
                                                         mode = mode_test,
                                                         label_file = label_file, 
                                                         line_graph_1 =True, 
                                                         class_dict = octa_dr_dict,
-                                                        pickle_file = test_pickle
+                                                        pickle_file = test_pickle # f"../{data_type}_{mode_test}_dataset_faz.pkl" #f"../{data_type}_{mode_test}_dataset_faz.pkl")
                                                         )
+
+
+
+#mode_train = "train"
+#train_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_train}_dataset.pkl"
+#train_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(vessel_graph_path,
+#                                                        void_graph_path,
+#                                                        hetero_edges_path,
+#                                                        mode = mode_train,
+#                                                        label_file = label_file, 
+#                                                        line_graph_1 =True, 
+#                                                        class_dict = octa_dr_dict,
+#                                                        pickle_file = train_pickle
+#                                                        )
+#
+#mode_test = "test"
+#test_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_test}_dataset.pkl"
+#test_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(vessel_graph_path,
+#                                                        void_graph_path,
+#                                                        hetero_edges_path,
+#                                                        mode = mode_test,
+#                                                        label_file = label_file, 
+#                                                        line_graph_1 =True, 
+#                                                        class_dict = octa_dr_dict,
+#                                                        pickle_file = test_pickle
+#                                                        )
 
 # make sure that if data is read from file the classes are still the correct
 train_dataset.update_class(octa_dr_dict)
@@ -145,8 +145,9 @@ prep.hetero_graph_imputation(test_dataset)
 prep.add_node_features(train_dataset, ["graph_1", "graph_2"])
 prep.add_node_features(test_dataset, ["graph_1", "graph_2"])
 
-prep.add_global_node(train_dataset)
-prep.add_global_node(test_dataset)
+if sweep_config.global_node:
+    prep.add_global_node(train_dataset)
+    prep.add_global_node(test_dataset)
 
 
 node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(train_dataset)
@@ -174,19 +175,23 @@ with open("label_dict.json", "r") as file:
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
-#eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
-#                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "equivalent_diameter"]}
+eliminate_features = {"graph_1":["num_voxels", "hasNodeAtSampleBorder"], 
+                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "equivalent_diameter", "orientation", "intensity_min", "intensity_max", "intensity_mean"],
+                      "faz":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "equivalent_diameter", "orientation", "intensity_min", "intensity_max", "intensity_mean"]}
 #eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
 #                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "centroid-0", "centroid-1", "feret_diameter_max", "equivalent_diameter", "orientation","solidity"]}
-## get positions of features to eliminate and remove them from the feature label dict and the graphs
-#for key in eliminate_features.keys():
-#    for feat in eliminate_features[key]:
-#        idx = features_label_dict[key].index(feat)
-#        features_label_dict[key].remove(feat)
-#        for data in train_dataset:
-#            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
-#        for data in test_dataset:
-#            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+
+# get positions of features to eliminate and remove them from the feature label dict and the graphs
+for key in eliminate_features.keys():
+    for feat in eliminate_features[key]:
+        idx = features_label_dict[key].index(feat)
+        features_label_dict[key].remove(feat)
+        for data in train_dataset:
+            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+        for data in test_dataset:
+            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+
+print(train_dataset[0])
 
 
 max_nodes = np.max([graph.num_nodes for graph in train_dataset] + [graph.num_nodes for graph in test_dataset])
@@ -233,12 +238,20 @@ def main():
                                                         faz_node= sweep_config.faz_node,
                                                         global_node = sweep_config.global_node,
                                                         )
+
+    # xavier initialization
+    for m in model.modules():
+        if isinstance(m, (torch.nn.Linear)):
+            torch.nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                torch.nn.init.zeros_(m.bias)
     
     # create data loaders for training and test set
     train_loader = DataLoader(train_dataset, batch_size = sweep_config.batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size = 64, shuffle=False)
 
     # weigthings for imbalanced classes 
+    # torch.nn.CrossEntropyLoss(weight=class_weights) BCEWithLogitsLoss
     balanced_loss = torch.nn.CrossEntropyLoss(class_weights)
     unbalanced_loss = torch.nn.CrossEntropyLoss()
     weak_balanced_loss = torch.nn.CrossEntropyLoss(weak_class_weights)
@@ -271,9 +284,21 @@ def main():
 
         reg = False
         if not reg:
+            #make the predicted class the largest class that is > 0.0
+            #mask = (y_prob_test > 0.0)
+            #y_pred_test = np.argmax(y_prob_test * mask, axis=1)
+            #shape = y_prob_test.shape
+            #result_array = np.arange(1, shape[1] + 1)
+            #result_array = np.tile(result_array, (shape[0], 1))
+            #y_pred_test = np.argmax(result_array * mask, axis=1)
+
             y_pred_test = y_prob_test.argmax(axis=1)
         else:
             y_pred_test = y_prob_test.squeeze()
+
+        #print(y_prob_test)
+        #print(y_pred_test)
+        #print(y_true_test)
 
         test_acc = accuracy_score(y_true_test, y_pred_test)
         test_bal_acc = balanced_accuracy_score(y_true_test, y_pred_test)
@@ -284,7 +309,7 @@ def main():
         if test_bal_acc > best_val_bal_acc:
             best_val_bal_acc = test_bal_acc
 
-        if epoch % 10 == 0:
+        if epoch % 777 == 0:
             # print the sample with top 20 highest average loss, with the loss and the label
             print("Highest loss samples")
             # sort the loss dict by loss, descending, loss is the value of the dict
@@ -294,7 +319,7 @@ def main():
                 print(f"Sample: {key}, Loss: {sorted_loss_dict[key]:.4f}")
         
 
-        if epoch == 100:  # kappa > 0.70 or epoch == 20
+        if  test_bal_acc > 0.50 or epoch == 9: # kappa > 0.70 or epoch == 15:
             print("start_explain")
 
             indices = [0, 1, 13, 15]
@@ -309,6 +334,7 @@ def main():
                 #data = next(iter(cam_loader))
                 data = data.to(device)
                 print(data.y)
+                data_label = data.graph_id[0]
 
                 # predict with no grad
                 with torch.no_grad():
@@ -317,20 +343,27 @@ def main():
                     #out = torch.nn.functional.softmax(out, dim = 1)
                     print(out)
                     out = out.argmax(dim=1)
-
+                """
                 cam_model = copy.deepcopy(model)
                 cam_cls = np.arange(num_classes) # god knows why
-                cam = grad_cam.grad_cam_data(cam_model, data, cam_cls, scale = False, relu = True, start = False, abs=True)
+                cam = grad_cam.grad_cam_data(cam_model, data, cam_cls, scale = False, relu = True, start = False, abs=True, faz_node = sweep_config.faz_node)
                 fig, ax = plt.subplots(1,num_classes, figsize=(5*num_classes,5))
                 # add titles for each subplot in the figure
                 for i, ax_iter in enumerate(ax):
                     ax_iter.set_title(label_names[i])
 
                 # add legend to the figure that assigns the square marker ("s") to the intercapillary region and the circle marker to the vessel region    
-                legend_items = [
-                    plt.Line2D([0], [0], marker='s', color='red', alpha = 0.8, label='ICP Region', markerfacecolor='red', markersize=6, linestyle='None'),
-                    plt.Line2D([0], [0], marker='o', color='red', alpha = 0.8, label='Vessel', markerfacecolor='red', markersize=6, linestyle='None'),
-                ]
+                if sweep_config.faz_node:
+                    legend_items = [
+                        plt.Line2D([0], [0], marker='s', color='red', alpha = 0.8, label='ICP Region', markerfacecolor='red', markersize=6, linestyle='None'),
+                        plt.Line2D([0], [0], marker='o', color='red', alpha = 0.8, label='Vessel', markerfacecolor='red', markersize=6, linestyle='None'),
+                        plt.Line2D([0], [0], marker="D", color='red', alpha = 0.8, label='Fovea', markerfacecolor='blue', markersize=6, linestyle='None'),
+                    ]
+                else:
+                    legend_items = [
+                        plt.Line2D([0], [0], marker='s', color='red', alpha = 0.8, label='ICP Region', markerfacecolor='red', markersize=6, linestyle='None'),
+                        plt.Line2D([0], [0], marker='o', color='red', alpha = 0.8, label='Vessel', markerfacecolor='red', markersize=6, linestyle='None'),
+                    ]
 
                 # Add legend to the plot
                 ax[2].legend(handles=legend_items, loc='upper right')
@@ -339,13 +372,16 @@ def main():
                 for ax_idx, cam_res in enumerate(cam):
                     plotter2d = graph_2D.HeteroGraphPlotter2D()
                     #plotter2d.set_val_range(1, 0)
-                    plotter2d.plot_graph_2D(data ,edges= False, pred_val_dict = cam_res, ax = ax[ax_idx])
+                    if sweep_config.faz_node:
+                        plotter2d.plot_graph_2D_faz(data ,edges= False, pred_val_dict = cam_res, ax = ax[ax_idx])
+                    else:
+                        plotter2d.plot_graph_2D(data ,edges= False, pred_val_dict = cam_res, ax = ax[ax_idx])
 
                 fig.legend()
                 plt.tight_layout()
-                plt.savefig(f'explain_out/gradCAM_{idx}_plot_{epoch}_final.png' ) 
+                plt.savefig(f'explain_out/gradCAM_{data_label}_plot_{epoch}_final.png' ) 
                 plt.close()
-
+                """
 
                 #data = next(iter(gnnexp_loader))
                 #data = data.to(device)
@@ -384,14 +420,70 @@ def main():
                 #print(explanation)
 
                 # for GNN Explainer forces sparsity, thres
-                torch_geom_explanation.visualize_feature_importance(explanation1, f'explain_out/feature_importance_{idx}_{explain_type}_{epoch}_attributes_expnum_1.png', features_label_dict, top_k = 50)
-                #torch_geom_explanation.visualize_feature_importance(explanation2, f'explain_out/feature_importance_{idx}_{explain_type}_{epoch}_attributes_expnum_2.png', features_label_dict, top_k = 50)
-                #torch_geom_explanation.visualize_feature_importance(explanation3, f'explain_out/feature_importance_{idx}_{explain_type}_{epoch}_attributes_expnum_3.png', features_label_dict, top_k = 50)
-                torch_geom_explanation.visualize_relevant_subgraph(explanation1, data, f"explain_out/subgraph_{idx}_{explain_type}_{epoch}_attributes_expnum_1.png", threshold = "adaptive", edge_threshold = "adaptive", edges = edges) #"adaptive"
-                #torch_geom_explanation.visualize_relevant_subgraph(explanation2, data, f"explain_out/subgraph_{idx}_{explain_type}_{epoch}_attributes_expnum_2.png", threshold = "adaptive", edge_threshold = "adaptive", edges = edges) #"adaptive"
-                #torch_geom_explanation.visualize_relevant_subgraph(explanation3, data, f"explain_out/subgraph_{idx}_{explain_type}_{epoch}_attributes_expnum_3.png", threshold = "adaptive", edge_threshold = "adaptive", edges = edges) #"adaptive"
-                #if epoch == 1:
-                #    graph_2D.HeteroGraphPlotter2D().plot_graph_2D(data, edges= True, path = f"fullbgraph_{idx}_{explain_type}.png")
+                torch_geom_explanation.visualize_feature_importance(explanation1, f'explain_out/feature_importance_{data_label}_{explain_type}_{epoch}_attributes_expnum_1.png', features_label_dict, top_k = 50)
+                #torch_geom_explanation.visualize_feature_importance(explanation2, f'explain_out/feature_importance_{data_label}_{explain_type}_{epoch}_attributes_expnum_2.png', features_label_dict, top_k = 50)
+                #torch_geom_explanation.visualize_feature_importance(explanation3, f'explain_out/feature_importance_{data_label}_{explain_type}_{epoch}_attributes_expnum_3.png', features_label_dict, top_k = 50)
+                torch_geom_explanation.visualize_relevant_subgraph(explanation1, data, f"explain_out/subgraph_{data_label}_{explain_type}_{epoch}_attributes_expnum_1.png", threshold = "adaptive", edge_threshold = "adaptive", edges = edges, faz_node= sweep_config.faz_node) #"adaptive"
+                #torch_geom_explanation.visualize_relevant_subgraph(explanation2, data, f"explain_out/subgraph_{data_label}_{explain_type}_{epoch}_attributes_expnum_2.png", threshold = "adaptive", edge_threshold = "adaptive", edges = edges) #"adaptive"
+                #torch_geom_explanation.visualize_relevant_subgraph(explanation3, data, f"explain_out/subgraph_{data_label}_{explain_type}_{epoch}_attributes_expnum_3.png", threshold = "adaptive", edge_threshold = "adaptive", edges = edges) #"adaptive"
+
+                graph_2D.HeteroGraphPlotter2D().plot_graph_2D_faz(data, edges= True, path = f"explain_out/fullgraph_{data_label}_{explain_type}.png")
+
+                torch_geom_explanation.visualize_node_importance_histogram(explanation1, f"explain_out/node_hist_{data_label}_{explain_type}_{epoch}_attributes_expnum_1.png")
+
+                #torch_geom_explanation.(explanation2, f"explain_out/node_hist_{data_label}_{explain_type}_{epoch}_attributes_expnum_2.png")
+
+                data_type = "DCP"
+
+                segmentation_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_seg"
+                json_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_json"
+                image_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_images"
+
+                raw_data_explainer = explanation_in_raw_data.RawDataExplainer(raw_image_path= image_path, segmentation_path= segmentation_path, vvg_path= json_path)
+                raw_data_explainer.create_explanation_image(explanation1,data, data_label, f"explain_out/overlay_{data_label}_{epoch}.png", faz_node= sweep_config.faz_node, threshold = "adaptive", edge_threshold = "adaptive")
+
+
+                graph_ax = raw_data_explainer.create_explanation_image(explanation1,data,data_label, path=None, faz_node= sweep_config.faz_node, threshold = "adaptive", edge_threshold = "adaptive")
+                torch_geom_explanation.visualize_relevant_subgraph(explanation1, data, f"explain_out/overlay_subgraph_{data_label}_{epoch}.png", 
+                                                                        threshold = "adaptive",
+                                                                        edge_threshold = "adaptive",
+                                                                        edges = edges, 
+                                                                        faz_node= sweep_config.faz_node,
+                                                                        ax=graph_ax) #"adaptive"
+
+                fig, ax = plt.subplots()
+                # add titles for each subplot in the figure
+
+                # add legend to the figure that assigns the square marker ("s") to the intercapillary region and the circle marker to the vessel region    
+                if sweep_config.faz_node:
+                    legend_items = [
+                        plt.Line2D([0], [0], marker='s', color='red', alpha = 0.8, label='ICP Region', markerfacecolor='red', markersize=6, linestyle='None'),
+                        plt.Line2D([0], [0], marker='o', color='red', alpha = 0.8, label='Vessel', markerfacecolor='red', markersize=6, linestyle='None'),
+                        plt.Line2D([0], [0], marker="D", color='red', alpha = 0.8, label='Fovea', markerfacecolor='blue', markersize=6, linestyle='None'),
+                    ]
+                else:
+                    legend_items = [
+                        plt.Line2D([0], [0], marker='s', color='red', alpha = 0.8, label='ICP Region', markerfacecolor='red', markersize=6, linestyle='None'),
+                        plt.Line2D([0], [0], marker='o', color='red', alpha = 0.8, label='Vessel', markerfacecolor='red', markersize=6, linestyle='None'),
+                    ]
+
+                plotter2d = graph_2D.HeteroGraphPlotter2D()
+                #plotter2d.set_val_range(1, 0)
+
+                importance_dict = {}
+                for key in explanation1.x_dict.keys():
+                    importance_dict[key] = explanation1.x_dict[key].abs().sum(dim=-1) 
+
+                if sweep_config.faz_node:
+                    plotter2d.plot_graph_2D_faz(data ,edges= False, pred_val_dict = importance_dict, ax = ax)
+                else:
+                    plotter2d.plot_graph_2D(data ,edges= False, pred_val_dict = importance_dict, ax = ax)
+
+                fig.legend()
+                plt.tight_layout()
+                plt.savefig(f'explain_out/integrate_gradients_{data_label}_plot_{epoch}_final.png' ) 
+                plt.close()
+
 
             break
 main()
