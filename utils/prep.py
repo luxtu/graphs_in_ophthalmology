@@ -82,14 +82,20 @@ def hetero_graph_imputation(dataset):
 
 def hetero_graph_normalization_params(train_dataset):
 
+    # iterable dataset
+    try:
+        iterable = train_dataset.hetero_graph_list
+    except AttributeError:
+        iterable = train_dataset
+
     import torch
     node_tensors = {}
     node_mean_tensors = {}
     node_std_tensors = {}
-    for key, val in train_dataset.hetero_graph_list[0].x_dict.items():
+    for key, val in iterable[0].x_dict.items():
         node_tensors[key] = None
 
-    for data in train_dataset:
+    for data in iterable:
         for key, val in data.x_dict.items():
             node_tensors[key] = torch.cat([node_tensors[key], val]) if node_tensors[key] is not None else val
 
