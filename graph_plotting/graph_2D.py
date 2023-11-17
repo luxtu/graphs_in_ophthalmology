@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from line_profiler import LineProfiler
 from torch.nn import functional
 from matplotlib import colors
+from matplotlib.colors import PowerNorm
 
 class GraphPlotter2D():
 
@@ -58,14 +59,14 @@ class GraphPlotter2D():
 
         if not self.line_G:
             if self.pred_vals is not None:
-                sc = ax.scatter(self.node_positions[:,1], self.node_positions[:,0], s = 5,c = self.pred_vals, cmap = "coolwarm")
+                sc = ax.scatter(self.node_positions[:,1], self.node_positions[:,0], s = 5,c = self.pred_vals, cmap = "coolwarm",zorder = 2)
                 plt.colorbar(sc)
             else:
-                ax.scatter(self.node_positions[:,1], self.node_positions[:,0], s = 8, c = "orange") # cmap = "coolwarm"
+                ax.scatter(self.node_positions[:,1], self.node_positions[:,0], s = 8, c = "blue", zorder = 2) # cmap = "coolwarm"
 
             if edges:
                 for edge in self.edge_indices.T:
-                    ax.plot(self.node_positions[edge,1], self.node_positions[edge,0], c="black",linewidth=1, alpha=0.5)
+                    ax.plot(self.node_positions[edge,1], self.node_positions[edge,0], c="black",linewidth=1, alpha=0.5, zorder = 1)
         else:
             if self.pred_vals is not None:
                 sc = ax.scatter(self.edge_positions[:,1], self.edge_positions[:,0], s = 5, c= self.pred_vals, cmap= "coolwarm", vmin = -0.5, vmax =0.5)
@@ -163,8 +164,11 @@ class HeteroGraphPlotter2D():
                 upper_range = self.upper_range
                 lower_range = self.lower_range
 
-            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Oranges", zorder = 2, alpha= 0.5, vmin = lower_range, vmax = upper_range ) #,alpha = sft_max1
-            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= 0.5, marker = "s" , vmin = lower_range, vmax = upper_range) #alpha = sft_max2 
+
+            power_norm = PowerNorm(gamma=0.5, vmin=lower_range, vmax=upper_range)
+
+            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Oranges", zorder = 2, alpha= 0.8, norm = power_norm) # vmin = lower_range, vmax = upper_range ) #,alpha = sft_max1
+            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= 0.8, marker = "s" , norm = power_norm) # vmin = lower_range, vmax = upper_range) #alpha = sft_max2 
 
             #[:,self.cls]
             #[:,self.cls]
@@ -234,6 +238,7 @@ class HeteroGraphPlotter2D():
             #actually not softmaxed
             sft_max1 = pred_val_dict[self.graph_1_name].cpu().detach()#, dim=1)#functional.softmax(
             sft_max2 = pred_val_dict[self.graph_2_name].cpu().detach()#, dim=1)#functional.softmax(
+            sft_max3 = pred_val_dict[self.graph_3_name].cpu().detach()#, dim=1)#functional.softmax(
 
 
             #max_v = max(pred_val_dict[self.graph_1_name].cpu().detach()[:,self.cls].max(), pred_val_dict[self.graph_2_name].cpu().detach()[:,self.cls].max())#1
@@ -241,23 +246,34 @@ class HeteroGraphPlotter2D():
 
             #upper_range = max(max_v, abs(min_v))
             if not hasattr(self, "upper_range"):
-                upper_range = max(sft_max1.max(), sft_max2.max())
-                lower_range = min(sft_max1.min(), sft_max2.min())
+                upper_range = max(sft_max1.max(), sft_max2.max(), sft_max3.max())
+                lower_range = min(sft_max1.min(), sft_max2.min(), sft_max3.min())
             else:
                 upper_range = self.upper_range
                 lower_range = self.lower_range
 
-            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Oranges", zorder = 2, alpha= 0.5, vmin = lower_range, vmax = upper_range ) #,alpha = sft_max1
-            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= 0.5, marker = "s" , vmin = lower_range, vmax = upper_range) #alpha = sft_max2 
-            sc3 = ax.scatter(het_graph3_pos[:,1], het_graph3_pos[:,0], s = 16, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= 0.5, marker = "D" , vmin = lower_range, vmax = upper_range) #alpha = sft_max2
+            scale_alpha_1 = (sft_max1 - lower_range)/(upper_range - lower_range)
+            scale_alpha_2 = (sft_max2 - lower_range)/(upper_range - lower_range)
+            scale_alpha_3 = (sft_max3 - lower_range)/(upper_range - lower_range)
+
+            # assign a minimum alpha value of 0.2
+            scale_alpha_1[scale_alpha_1 < 0.2] = 0.2
+            scale_alpha_2[scale_alpha_2 < 0.2] = 0.2
+            scale_alpha_3[scale_alpha_3 < 0.2] = 0.2
+
+            power_norm = PowerNorm(gamma=0.5, vmin=lower_range, vmax=upper_range)
+
+            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Oranges", zorder = 2, alpha= scale_alpha_1, norm=power_norm) # vmin = lower_range, vmax = upper_range, #,alpha = sft_max1 
+            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= scale_alpha_2, marker = "s" , norm= power_norm) #alpha = sft_max2, vmin = lower_range, vmax = upper_range 
+            sc3 = ax.scatter(het_graph3_pos[:,1], het_graph3_pos[:,0], s = 16, c = sft_max3, cmap = "Oranges", zorder = 2, alpha= scale_alpha_3, marker = "D" , norm= power_norm) #alpha = sft_max2, vmin = lower_range, vmax = upper_range
             #[:,self.cls]
             #[:,self.cls]
 
             plt.colorbar(sc2)
         else:
-            ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0],alpha = 0, s = 8)
-            ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0],alpha = 0, s = 12, marker = "s")
-            ax.scatter(het_graph3_pos[:,1], het_graph3_pos[:,0],alpha = 0, s = 16, marker = "D")
+            ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0],alpha = 0.8, s = 8)
+            ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0],alpha = 0.8, s = 12, marker = "s")
+            ax.scatter(het_graph3_pos[:,1], het_graph3_pos[:,0],alpha = 0.8, s = 16, marker = "D")
 
         if path is not None:
             plt.tight_layout()
