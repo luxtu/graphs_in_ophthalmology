@@ -2,6 +2,53 @@ import torch
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from torch.optim.lr_scheduler import ExponentialLR
+from torch.nn import BCEWithLogitsLoss
+
+
+
+
+def multi_label_loss(out, y, num_classes, loss_func, device):
+    # create one hot encoding
+    y_one_hot = torch.nn.functional.one_hot(y, num_classes = num_classes).float()
+    for i, label in enumerate(y):
+        y_one_hot[i,:label+1] = 1
+        if label > 0:
+            y_one_hot[i,0] = 0
+
+    #print(y_one_hot)
+    #print(out)
+
+    pos_weight = torch.ones(num_classes, device = device)
+    pos_weight -= 0.8
+    for i, label in enumerate(y):
+        y_one_hot[i,label] = 1
+
+    loss_func.pos_weight = pos_weight
+
+    loss = loss_func(out, y_one_hot) 
+    return loss
+    
+
+
+def smoothed_label_loss(out, y, num_classes, loss_func, device):
+    smooth_y = torch.nn.functional.one_hot(y, num_classes=num_classes).float()
+    # gaussian filter the labels
+    # smooth_y = torch.nn.functional.gaussian_filter(smooth_y, sigma=1) 
+    # Convert PyTorch tensor to NumPy array
+    smooth_y_np = smooth_y.cpu().numpy()  # Assuming you're on CPU
+    # convert to float
+    smooth_y_np = smooth_y_np.astype(float)
+    # Apply Gaussian filter using scipy
+    smooth_y_filtered = gaussian_filter(smooth_y_np, sigma=0.1) # 45 worked well # small sigma alsmost no smoothing
+    # Convert back to PyTorch tensor
+    smooth_y_filtered = torch.from_numpy(smooth_y_filtered).to(device)
+    # make sure its a float
+    smooth_y_filtered = smooth_y_filtered.float()
+    loss = loss_func(out, smooth_y_filtered) # data.y)
+    return loss
+
+
+
 
 
 def custom_loss(out_diseased, out_stage, y):
@@ -72,21 +119,9 @@ class graphClassifierHetero():
             #print(out.shape)
             #print(data.y.shape)
 
-            smooth_y = torch.nn.functional.one_hot(data.y, num_classes=4).float()
-            # gaussian filter the labels
-            # smooth_y = torch.nn.functional.gaussian_filter(smooth_y, sigma=1) 
-            # Convert PyTorch tensor to NumPy array
-            smooth_y_np = smooth_y.cpu().numpy()  # Assuming you're on CPU
-            # convert to float
-            smooth_y_np = smooth_y_np.astype(float)
-            # Apply Gaussian filter using scipy
-            smooth_y_filtered = gaussian_filter(smooth_y_np, sigma=0.45)
-            # Convert back to PyTorch tensor
-            smooth_y_filtered = torch.from_numpy(smooth_y_filtered).to(self.device)
-            # make sure its a float
-            smooth_y_filtered = smooth_y_filtered.float()
+            loss = smoothed_label_loss(out, data.y, 4, self.lossFunc, self.device) 
+            #loss = multi_label_loss(out, data.y, 4, self.lossFunc, self.device)
 
-            loss = self.lossFunc(out, smooth_y_filtered) # data.y)
             #loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
             loss.backward()  # Derive gradients.
             self.optimizer.step()  # Update parameters based on gradients.
