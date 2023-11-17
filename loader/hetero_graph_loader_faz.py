@@ -75,6 +75,8 @@ class HeteroGraphLoaderTorch:
             graphs_3 = self.full_graphs_3
 
             self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2, graphs_3)
+            for key, value in self.hetero_graphs.items():
+                value.graph_id = key
             self.hetero_graph_list = list(self.hetero_graphs.values())
 
 
@@ -82,6 +84,8 @@ class HeteroGraphLoaderTorch:
             try: 
                 with open(pickle_file, "rb") as f:
                     self.hetero_graphs = pickle.load(f)
+                for key, value in self.hetero_graphs.items():
+                    value.graph_id = key
                 self.hetero_graph_list = list(self.hetero_graphs.values())
             except FileNotFoundError:
                 print("Pickle file not found, creating new one")
@@ -109,6 +113,8 @@ class HeteroGraphLoaderTorch:
                 graphs_3 = self.full_graphs_3
 
                 self.hetero_graphs = self.create_hetero_graphs(graphs_1, graphs_2, graphs_3)
+                for key, value in self.hetero_graphs.items():
+                    value.graph_id = key
                 self.hetero_graph_list = list(self.hetero_graphs.values())
 
                 with open(pickle_file, "wb") as f:
