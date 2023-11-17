@@ -14,7 +14,7 @@ from loader import vvg_loader
 
 class HeterographFromVVGGenerator:
 
-    def __init__(self, seg_path, vvg_path, void_graph_save_path, hetero_edges_save_path, faz_node = False, image_path = None ,debug = False, faz_node_save_path = None, faz_region_edges_save_path = None, faz_vessel_edges_save_path = None):
+    def __init__(self, seg_path, vvg_path, void_graph_save_path, hetero_edges_save_path, faz_node = False, image_path = None ,debug = False,force = False, faz_node_save_path = None, faz_region_edges_save_path = None, faz_vessel_edges_save_path = None):
 
         self.seg_path = seg_path
         self.vvg_path = vvg_path
@@ -149,7 +149,8 @@ class HeterographFromVVGGenerator:
 
 
         if self.debug:
-            plt.imshow(region_labels)
+            fig, ax = plt.subplots(figsize=(10, 10))
+            ax.imshow(region_labels)
             
         if self.image_path is not None:
             props = measure.regionprops_table(region_labels,intensity_image=image, 
@@ -184,6 +185,8 @@ class HeterographFromVVGGenerator:
                                                  'axis_major_length',
                                                  'axis_minor_length'))
         df = pd.DataFrame(props)  
+
+
         if self.faz_node:
             # faz_region is the region with label at 600,600
             faz_region_label = region_labels[600,600]
@@ -239,21 +242,21 @@ class HeterographFromVVGGenerator:
             edge_index_region_vessel_df.to_csv(region_vessel_edges_file, sep = ";")
         else:
             # plot the nodes
-            plt.scatter(df["centroid-1"], df["centroid-0"], s = 8, c= "orange")
+            ax.scatter(df["centroid-1"], df["centroid-0"], s = 8, c= "orange")
             # plot the connections between the nodes
             for id, edge in edge_index_df.iterrows():
                 #print(edge["node1id"], edge["node2id"])
-                plt.plot([df["centroid-1"][edge["node1id"]], df["centroid-1"][edge["node2id"]]], [df["centroid-0"][edge["node1id"]], df["centroid-0"][edge["node2id"]]], c = "black", linewidth = 0.5)
+                ax.plot([df["centroid-1"][edge["node1id"]], df["centroid-1"][edge["node2id"]]], [df["centroid-0"][edge["node1id"]], df["centroid-0"][edge["node2id"]]], c = "black", linewidth = 0.5)
 
             if self.faz_node:
-                plt.scatter(df_faz_node["centroid-1"], df_faz_node["centroid-0"], s = 12, c= "red")
+                ax.scatter(df_faz_node["centroid-1"], df_faz_node["centroid-0"], s = 12, c= "red")
 
                 faz_centroid_1 = df_faz_node["centroid-1"]
                 faz_centroid_0 = df_faz_node["centroid-0"]
 
                 # print edges to faz region, node1id is redundant because it is always the faz region
                 for id, edge in faz_region_df.iterrows():
-                    plt.plot([faz_centroid_1, df["centroid-1"][edge["node2id"]]], [faz_centroid_0, df["centroid-0"][edge["node2id"]]], c = "red", linewidth = 0.5)
+                    ax.plot([faz_centroid_1, df["centroid-1"][edge["node2id"]]], [faz_centroid_0, df["centroid-0"][edge["node2id"]]], c = "red", linewidth = 0.5)
 
             plt.show()
             plt.close()
@@ -391,8 +394,16 @@ class HeterographFromVVGGenerator:
 
     def generate_skel_labels(self, vvg_file, seg_shape):
 
+
+
         vvg_df_edges, vvg_df_nodes = vvg_loader.vvg_to_df(os.path.join(self.vvg_path, vvg_file))
-        cl_arr = vvg_tools.vvg_df_to_centerline_array(vvg_df_edges,vvg_df_nodes, seg_shape)
+        cl_arr = vvg_tools.vvg_df_to_centerline_array(vvg_df_edges,vvg_df_nodes, seg_shape, debug = self.debug)
+
+        #if self.debug:
+        #    fig, ax = plt.subplots(figsize=(10, 10))
+        #    ax.imshow(cl_arr)
+        #    plt.show()
+        #    plt.close()
 
         # make all border pixels 1
         cl_arr[:2,:] = 1
