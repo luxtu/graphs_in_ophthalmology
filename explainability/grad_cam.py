@@ -5,11 +5,16 @@ from sklearn.preprocessing import MinMaxScaler
 
 
 
-def grad_cam_data(model, data, target_class, scale = False, relu = False, start = False, abs = False):
+def grad_cam_data(model, data, target_class, scale = False, relu = False, start = False, abs = False, faz_node = False):
     # Perform forward pass for the target class
     model.eval()
     pos_dict = {}
-    for key in ["graph_1", "graph_2"]:
+    node_types = ["graph_1", "graph_2"]
+
+    if faz_node:
+        node_types.append("faz")
+
+    for key in node_types:
         pos_dict[key] = data[key].pos
     output = model(data.x_dict, data.edge_index_dict, data.batch_dict,  grads = True, pos_dict = pos_dict) #data._slice_dict #training = True,
 
@@ -21,7 +26,7 @@ def grad_cam_data(model, data, target_class, scale = False, relu = False, start 
     for c in target_class:
         output[:, c].backward(retain_graph=True)
         # Compute Grad-CAM
-        node_heat_map = grad_cam_heat_map(model, relu = relu, start = start) # .gnn1_embed
+        node_heat_map = grad_cam_heat_map(model, relu = relu, start = start,abs =abs,  faz_node = faz_node) # .gnn1_embed
         heat_maps.append(node_heat_map)
 
     if scale:
@@ -54,7 +59,7 @@ def grad_cam_data(model, data, target_class, scale = False, relu = False, start 
         return heat_maps
 
 
-def grad_cam_heat_map(model, start = False, relu = False, abs = False):
+def grad_cam_heat_map(model, start = False, relu = False, abs = False, faz_node = False):
     # Compute Grad-CAM
 
     try:
@@ -67,20 +72,30 @@ def grad_cam_heat_map(model, start = False, relu = False, abs = False):
         conv_grads_2 = model.start_conv_grads_2
         conv_acts_1 = model.start_conv_acts_1
         conv_acts_2 = model.start_conv_acts_2
+        if faz_node:
+            conv_grads_3 = model.start_conv_grads_3
+            conv_acts_3 = model.start_conv_acts_3
     else:
         conv_grads_1 = model.final_conv_grads_1
         conv_grads_2 = model.final_conv_grads_2
         conv_acts_1 = model.final_conv_acts_1
         conv_acts_2 = model.final_conv_acts_2
+        if faz_node:
+            conv_grads_3 = model.final_conv_grads_3
+            conv_acts_3 = model.final_conv_acts_3
 
     # abs value of the gradients
 
     if abs:
         conv_grads_1 = torch.abs(conv_grads_1)
         conv_grads_2 = torch.abs(conv_grads_2)
+        if faz_node:
+            conv_grads_3 = torch.abs(conv_grads_3)
 
     alphas_1 = torch.mean(conv_grads_1, axis=0)
     alphas_2 = torch.mean(conv_grads_2, axis=0)
+    if faz_node:
+        alphas_3 = torch.mean(conv_grads_3, axis=0)
     node_heat_map_1 = []
     for n in range(conv_acts_1.shape[0]):
         node_heat = alphas_1 @ conv_acts_1[n]#).item() F.relu(
@@ -96,10 +111,20 @@ def grad_cam_heat_map(model, start = False, relu = False, abs = False):
 
         node_heat_map_2.append(node_heat.item())
 
+    if faz_node:
+        node_heat_map_3 = []
+        for n in range(conv_acts_3.shape[0]):
+            node_heat = alphas_3 @ conv_acts_3[n]
+        if relu:
+            node_heat = F.relu(node_heat)
+        node_heat_map_3.append(node_heat.item())
+
     node_heat_map = {}
     #print(node_heat_map_1)
     node_heat_map["graph_1"] = torch.tensor(np.array(node_heat_map_1))
     node_heat_map["graph_2"] = torch.tensor(np.array(node_heat_map_2))
+    if faz_node:
+        node_heat_map["faz"] = torch.tensor(np.array(node_heat_map_3))
 
     return node_heat_map
 

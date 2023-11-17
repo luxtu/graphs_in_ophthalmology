@@ -86,14 +86,20 @@ class GNN_global_node(torch.nn.Module):
         self.final_conv_acts = {"graph_1": None, "graph_2": None}
         self.final_conv_acts_1 = None
         self.final_conv_acts_2 = None
+        self.final_conv_acts_3 = None
+
         self.final_conv_grads_1 = None
         self.final_conv_grads_2 = None
+        self.final_conv_grads_3 = None
 
         self.start_conv_acts = {"graph_1": None, "graph_2": None}
         self.start_conv_acts_1 = None
         self.start_conv_acts_2 = None
+        self.start_conv_acts_3 = None
+
         self.start_conv_grads_1 = None
         self.start_conv_grads_2 = None
+        self.start_conv_grads_3 = None
 
 
         
@@ -124,20 +130,20 @@ class GNN_global_node(torch.nn.Module):
         #x_dict = self.forward_core(x_dict, edge_index_dict, grads = grads)
 
         ## for each node type, aggregate over all nodes of that type
-        start_representations = []
-        for key in x_dict.keys():
-            if isinstance(self.aggregation_mode, list):
-                for j in range(len(self.aggregation_mode)):
-                    # check if the aggregation mode is global_add_pool
-                    if self.aggregation_mode[j] == global_add_pool:
-                        start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key])/1000) 
-                    else:
-                        start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))
-            else:
-                start_representations.append(self.aggregation_mode(x_dict[key], batch_dict[key]))
-            #start_representations.append(global_mean_pool(x_dict[key], batch_dict[key]))
+        #start_representations = []
+        #for key in x_dict.keys():
+        #    if isinstance(self.aggregation_mode, list):
+        #        for j in range(len(self.aggregation_mode)):
+        #            # check if the aggregation mode is global_add_pool
+        #            if self.aggregation_mode[j] == global_add_pool:
+        #                start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key])/1000) 
+        #            else:
+        #                start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))
+        #    else:
+        #        start_representations.append(self.aggregation_mode(x_dict[key], batch_dict[key]))
+        #    #start_representations.append(global_mean_pool(x_dict[key], batch_dict[key]))
+##
 #
-
         x = {}
 
        ########################################
@@ -176,11 +182,15 @@ class GNN_global_node(torch.nn.Module):
 
         self.final_conv_acts_1 = x["graph_1"]
         self.final_conv_acts_2 = x["graph_2"]
+        if self.faz_node:
+            self.final_conv_acts_3 = x["faz"]
 
         if grads:
             # register hooks for the gradients
             self.final_conv_acts_1.register_hook(self.activations_hook_1)
             self.final_conv_acts_2.register_hook(self.activations_hook_2)
+            if self.faz_node:
+                self.final_conv_acts_3.register_hook(self.activations_hook_3)
 
 
 
@@ -204,11 +214,11 @@ class GNN_global_node(torch.nn.Module):
 
 
         x = torch.cat(type_specific_representations, dim=1)  
-        x_start = torch.cat(start_representations, dim=1)
+        #x_start = torch.cat(start_representations, dim=1)
         # strong dropout for the start representation, avoid overrelaince on the start representation
-        x_start = F.dropout(x_start, p=0.5, training = self.training)
+        #x_start = F.dropout(x_start, p=0.5, training = self.training)
         #x = x_start
-        x = torch.cat([x_start, x], dim=1)
+        #x = torch.cat([x_start, x], dim=1)
         x = F.dropout(x, p=self.dropout, training = self.training)
 
         return self.lin3(self.activation(self.lin2(self.activation(self.lin1(x)))))
@@ -269,10 +279,15 @@ class GNN_global_node(torch.nn.Module):
         self.final_conv_acts_1 = x_dict["graph_1"]
         self.final_conv_acts_2 = x_dict["graph_2"]
 
+        if self.faz_node:
+            self.final_conv_acts_3 = x_dict["faz"]
+
         if grads:
             # register hooks for the gradients
             self.final_conv_acts_1.register_hook(self.activations_hook_1)
             self.final_conv_acts_2.register_hook(self.activations_hook_2)
+            if self.faz_node:
+                self.final_conv_acts_3.register_hook(self.activations_hook_3)
 
         # no relu after the last layer / before the pooling
 
@@ -284,6 +299,10 @@ class GNN_global_node(torch.nn.Module):
 
     def activations_hook_2(self, grad):
         self.final_conv_grads_2 = grad
+
+    def activations_hook_3(self, grad):
+        self.final_conv_grads_3 = grad
+
 
     def activations_hook_start_1(self, grad):
         self.start_conv_grads_1 = grad
