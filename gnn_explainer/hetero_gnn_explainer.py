@@ -141,7 +141,7 @@ class HeteroGNNExplainer(ExplainerAlgorithm):
 
         if self.edge_mask_dict is not None:
             #set_masks(model, self.edge_mask, edge_index, apply_sigmoid=True)
-            # maybe set hetero masks works just fine
+            # set hetero masks should be fine
             set_hetero_masks(model, self.edge_mask_dict, edge_index_dict, apply_sigmoid=True)
             for key in self.edge_mask_dict.keys():
                 parameters.append(self.edge_mask_dict[key])
@@ -196,23 +196,23 @@ class HeteroGNNExplainer(ExplainerAlgorithm):
                                         "disable it via `edge_mask_type=None`.")
                     self.hard_edge_mask_dict[key] = self.edge_mask_dict[key].grad != 0.0
 
-            """
-            previous: 
-            if i == 0 and self.node_mask is not None:
-                if self.node_mask.grad is None:
-                    raise ValueError("Could not compute gradients for node "
-                                     "features. Please make sure that node "
-                                     "features are used inside the model or "
-                                     "disable it via `node_mask_type=None`.")
-                self.hard_node_mask = self.node_mask.grad != 0.0
-            if i == 0 and self.edge_mask is not None:
-                if self.edge_mask.grad is None:
-                    raise ValueError("Could not compute gradients for edges. "
-                                     "Please make sure that edges are used "
-                                     "via message passing inside the model or "
-                                     "disable it via `edge_mask_type=None`.")
-                self.hard_edge_mask = self.edge_mask.grad != 0.0
-            """
+
+            #previous: 
+            #if i == 0 and self.node_mask is not None:
+            #    if self.node_mask.grad is None:
+            #        raise ValueError("Could not compute gradients for node "
+            #                         "features. Please make sure that node "
+            #                         "features are used inside the model or "
+            #                         "disable it via `node_mask_type=None`.")
+            #    self.hard_node_mask = self.node_mask.grad != 0.0
+            #if i == 0 and self.edge_mask is not None:
+            #    if self.edge_mask.grad is None:
+            #        raise ValueError("Could not compute gradients for edges. "
+            #                         "Please make sure that edges are used "
+            #                         "via message passing inside the model or "
+            #                         "disable it via `edge_mask_type=None`.")
+            #    self.hard_edge_mask = self.edge_mask.grad != 0.0
+
 
     def _initialize_masks(self, x_dict: dict, edge_index_dict: dict):
         node_mask_type = self.explainer_config.node_mask_type
@@ -245,23 +245,23 @@ class HeteroGNNExplainer(ExplainerAlgorithm):
                 assert False
 
 
-            """
-        Previous:
-        (N, F), E = x.size(), edge_index.size(1)
-
-        std = 0.1
-        if node_mask_type is None:
-            self.node_mask = None
-        elif node_mask_type == MaskType.object:
-            self.node_mask = Parameter(torch.randn(N, 1, device=device) * std)
-        elif node_mask_type == MaskType.attributes:
-            self.node_mask = Parameter(torch.randn(N, F, device=device) * std)
-        elif node_mask_type == MaskType.common_attributes:
-            self.node_mask = Parameter(torch.randn(1, F, device=device) * std)
-        else:
-            assert False
+        
+        #Previous:
+        #(N, F), E = x.size(), edge_index.size(1)
+#
+        #std = 0.1
+        #if node_mask_type is None:
+        #    self.node_mask = None
+        #elif node_mask_type == MaskType.object:
+        #    self.node_mask = Parameter(torch.randn(N, 1, device=device) * std)
+        #elif node_mask_type == MaskType.attributes:
+        #    self.node_mask = Parameter(torch.randn(N, F, device=device) * std)
+        #elif node_mask_type == MaskType.common_attributes:
+        #    self.node_mask = Parameter(torch.randn(1, F, device=device) * std)
+        #else:
+        #    assert False
             
-            """
+
         
         # create empty dicts for the edge masks
         self.edge_mask_dict = {}
@@ -285,19 +285,18 @@ class HeteroGNNExplainer(ExplainerAlgorithm):
             else:
                 assert False
 
-            """
-        Previous:
-        if edge_mask_type is None:
-            self.edge_mask = None
-        elif edge_mask_type == MaskType.object:
-            std = torch.nn.init.calculate_gain('relu') * sqrt(2.0 / (2 * N))
-            self.edge_mask = Parameter(torch.randn(E, device=device) * std)
-        else:
-            assert False
-            """
+    
+        #Previous:
+        #if edge_mask_type is None:
+        #    self.edge_mask = None
+        #elif edge_mask_type == MaskType.object:
+        #    std = torch.nn.init.calculate_gain('relu') * sqrt(2.0 / (2 * N))
+        #    self.edge_mask = Parameter(torch.randn(E, device=device) * std)
+        #else:
+        #    assert False
 
 
-    # loss is fine
+
     def _loss(self, y_hat: Tensor, y: Tensor) -> Tensor:
         if self.model_config.mode == ModelMode.binary_classification:
             loss = self._loss_binary_classification(y_hat, y)
@@ -308,17 +307,11 @@ class HeteroGNNExplainer(ExplainerAlgorithm):
         else:
             assert False
 
-        #loss *= 0.1
-
-
-        #print("prediction loss: ", loss)
 
         # check that it is not empty dict
         if self.hard_edge_mask_dict:
             assert bool(self.edge_mask_dict)
             
-            #print(self.edge_mask_dict.keys())
-            #print(self.hard_edge_mask_dict.keys())
             for key in self.edge_mask_dict.keys():
                 m = self.edge_mask_dict[key][self.hard_edge_mask_dict[key]].sigmoid()
                 edge_reduce = getattr(torch, self.coeffs['edge_reduction'])
@@ -333,43 +326,35 @@ class HeteroGNNExplainer(ExplainerAlgorithm):
                 # m is the masked node feature tensor after sigmoid
                 m = self.node_mask_dict[key][self.hard_node_mask_dict[key]].sigmoid()
                 node_reduce = getattr(torch, self.coeffs['node_feat_reduction'])
-                #print the different loss terms
-                # regularizes the mask size fore the node feature (N,F) tensor
                 feat_loss = self.coeffs['node_feat_size'] * node_reduce(m)
-                #print("feature loss: ",feat_loss)
                 loss = loss + feat_loss #self.coeffs['node_feat_size'] * node_reduce(m)
                 ent = -m * torch.log(m + self.coeffs['EPS']) - (
                     1 - m) * torch.log(1 - m + self.coeffs['EPS'])
                 entropy_loss = self.coeffs['node_feat_ent'] * ent.mean()
-                #print("feature entropy loss: ",entropy_loss)
                 loss = loss + entropy_loss #self.coeffs['node_feat_ent'] * ent.mean()
 
-        """
-        if self.hard_edge_mask is not None:
-            assert self.edge_mask is not None
-            m = self.edge_mask[self.hard_edge_mask].sigmoid()
-            edge_reduce = getattr(torch, self.coeffs['edge_reduction'])
-            loss = loss + self.coeffs['edge_size'] * edge_reduce(m)
-            ent = -m * torch.log(m + self.coeffs['EPS']) - (
-                1 - m) * torch.log(1 - m + self.coeffs['EPS'])
-            loss = loss + self.coeffs['edge_ent'] * ent.mean()
-
-        if self.hard_node_mask is not None:
-            assert self.node_mask is not None
-            m = self.node_mask[self.hard_node_mask].sigmoid()
-            node_reduce = getattr(torch, self.coeffs['node_feat_reduction'])
-            loss = loss + self.coeffs['node_feat_size'] * node_reduce(m)
-            ent = -m * torch.log(m + self.coeffs['EPS']) - (
-                1 - m) * torch.log(1 - m + self.coeffs['EPS'])
-            loss = loss + self.coeffs['node_feat_ent'] * ent.mean()
-
-        return loss
-        """
-        # fine so far, rest needs work for hetero case
-
+        
+        #if self.hard_edge_mask is not None:
+        #    assert self.edge_mask is not None
+        #    m = self.edge_mask[self.hard_edge_mask].sigmoid()
+        #    edge_reduce = getattr(torch, self.coeffs['edge_reduction'])
+        #    loss = loss + self.coeffs['edge_size'] * edge_reduce(m)
+        #    ent = -m * torch.log(m + self.coeffs['EPS']) - (
+        #        1 - m) * torch.log(1 - m + self.coeffs['EPS'])
+        #    loss = loss + self.coeffs['edge_ent'] * ent.mean()
+#
+        #if self.hard_node_mask is not None:
+        #    assert self.node_mask is not None
+        #    m = self.node_mask[self.hard_node_mask].sigmoid()
+        #    node_reduce = getattr(torch, self.coeffs['node_feat_reduction'])
+        #    loss = loss + self.coeffs['node_feat_size'] * node_reduce(m)
+        #    ent = -m * torch.log(m + self.coeffs['EPS']) - (
+        #        1 - m) * torch.log(1 - m + self.coeffs['EPS'])
+        #    loss = loss + self.coeffs['node_feat_ent'] * ent.mean()
 
         return loss
-
+        
+        
 
 
     def _clean_model(self, model):
