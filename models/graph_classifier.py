@@ -39,7 +39,7 @@ def smoothed_label_loss(out, y, num_classes, loss_func, device):
     # convert to float
     smooth_y_np = smooth_y_np.astype(float)
     # Apply Gaussian filter using scipy
-    smooth_y_filtered = gaussian_filter(smooth_y_np, sigma=0.1) # 45 worked well # small sigma alsmost no smoothing
+    smooth_y_filtered = gaussian_filter(smooth_y_np, sigma=0.4) # 0.45 worked well # small sigma alsmost no smoothing
     # Convert back to PyTorch tensor
     smooth_y_filtered = torch.from_numpy(smooth_y_filtered).to(device)
     # make sure its a float
@@ -119,7 +119,8 @@ class graphClassifierHetero():
             #print(out.shape)
             #print(data.y.shape)
 
-            loss = smoothed_label_loss(out, data.y, 4, self.lossFunc, self.device) 
+
+            loss = smoothed_label_loss(out, data.y, 3, self.lossFunc, self.device) 
             #loss = multi_label_loss(out, data.y, 4, self.lossFunc, self.device)
 
             #loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
