@@ -6,6 +6,7 @@ import pickle
 from torch_geometric.data import Data, HeteroData
 from torch_geometric.transforms import ToUndirected, RemoveIsolatedNodes
 from sklearn.model_selection import train_test_split
+import copy
 
 class HeteroGraphLoaderTorch:
 
@@ -140,23 +141,41 @@ class HeteroGraphLoaderTorch:
 
 
     def read_labels(self, label_file):
-        label_data = pd.read_csv(label_file)
+        
+
+        if self.mode == "train" or self.mode == "test" or self.mode == "val" or self.mode == "debug" or self.mode == "all":
+            label_data = pd.read_csv(label_file)
+            train, temp = train_test_split(label_data, test_size=0.3, random_state=42, stratify=label_data["Group"])
+            test, val = train_test_split(temp, test_size=0.5, random_state=42, stratify=temp["Group"])
+            del temp
+
+            _, debug = train_test_split(test, test_size=0.10, random_state=42, stratify=test["Group"])
+
+            if self.mode == "train":
+                label_data = train            
+            elif self.mode == "test":
+                label_data = test
+            elif self.mode == "val":
+                label_data = val
+            elif self.mode == "debug":
+                label_data = debug
+            elif self.mode == "all":
+                label_data = label_data
+
+        elif self.mode == "final_test":
+            # use split_0 for final test
+            label_file = self.label_file + "/split_0.csv"
+            label_data = pd.read_csv(label_file)
+
+        elif self.mode == "cv":
+            # load the splits and combine them to a label_data file 
+            splits = [ "split_1", "split_2", "split_3", "split_4", "split_5"]
+            label_data = pd.DataFrame()
+            for split in splits:
+                label_file = self.label_file + "/" + split + ".csv"
+                label_data = pd.concat([label_data, pd.read_csv(label_file)])
 
 
-        train, temp = train_test_split(label_data, test_size=0.3, random_state=42, stratify=label_data["Group"])
-        test, val = train_test_split(temp, test_size=0.5, random_state=42, stratify=temp["Group"])
-        del temp
-
-        _, debug = train_test_split(test, test_size=0.10, random_state=42, stratify=test["Group"])
-
-        if self.mode == "train":
-            label_data = train            
-        elif self.mode == "test":
-            label_data = test
-        elif self.mode == "val":
-            label_data = val
-        elif self.mode == "debug":
-            label_data = debug
 
 
         label_dict = {}
@@ -487,3 +506,94 @@ class HeteroGraphLoaderTorch:
             graph.to(device)
         return self
     
+
+    def set_split(self, set_type, split):
+        # set type is either the validation or train set
+        # split is the number of the split
+        # create a copy of the hetero_graphs dict
+        het_graphs = copy.deepcopy(self.hetero_graphs)
+
+        if set_type == "val":
+            # load the split
+            label_file = self.label_file + "/split_" + str(split) + ".csv"
+            
+            label_data = pd.read_csv(label_file)
+            # get the keys of the graphs in the split
+            label_data_keys = []
+            # keys are the subject ids with leading zeros and the eye
+            for i, row in label_data.iterrows():
+                index = row["Subject"]
+                # convert to string with leading zeros, 4 digits
+                index = str(index).zfill(4)
+                eye = row["Eye"]
+                label_data_keys.append(index + "_" + eye)
+
+            # remove all graphs from the dict that are not in the split
+            
+            for key in self.hetero_graphs.keys():
+                if key not in label_data_keys:
+                    del het_graphs[key]
+            # update the hetero_graphs
+            #self.hetero_graphs = het_graphs
+            # update the hetero_graph_list
+            self.hetero_graph_list = list(het_graphs.values())
+
+        elif set_type == "train":
+            # load the split
+            splits = [1,2,3,4,5]
+            # remove the split from the list
+            splits.remove(split)
+
+            label_data = pd.DataFrame()
+            for split in splits:
+                label_file = self.label_file + "/split_" + str(split) + ".csv"
+                label_data = pd.concat([label_data, pd.read_csv(label_file)])
+
+            # get the keys of the graphs in the split
+            label_data_keys = []
+            # keys are the subject ids with leading zeros and the eye
+            for i, row in label_data.iterrows():
+                index = row["Subject"]
+                # convert to string with leading zeros, 4 digits
+                index = str(index).zfill(4)
+                eye = row["Eye"]
+                label_data_keys.append(index + "_" + eye)
+
+            # remove all graphs from the dict that are not in the split
+            for key in self.hetero_graphs.keys():
+                if key not in label_data_keys:
+                    del het_graphs[key]
+            # update the hetero_graphs
+            #self.hetero_graphs = het_graphs
+            # update the hetero_graph_list
+            self.hetero_graph_list = list(het_graphs.values())
+
+        #elif set_type == "final_test":
+        #    # load the split
+        #    label_file = self.label_file + "/split_0.csv"
+        #    
+        #    label_data = pd.read_csv(label_file)
+        #    # get the keys of the graphs in the split
+        #    keys = []
+        #    # keys are the subject ids with leading zeros and the eye
+        #    for i, row in label_data.iterrows():
+        #        index = row["Subject"]
+        #        # convert to string with leading zeros, 4 digits
+        #        index = str(index).zfill(4)
+        #        eye = row["Eye"]
+        #        keys.append(index + "_" + eye)
+#
+        #    # remove all graphs from the dict that are not in the split
+        #    for key in self.hetero_graphs.keys():
+        #        if key not in label_data.keys():
+        #            del het_graphs[key]
+        #    # update the hetero_graphs
+        #    #self.hetero_graphs = het_graphs
+        #    # update the hetero_graph_list
+        #    self.hetero_graph_list = list(het_graphs.values())
+
+
+        else:
+            raise ValueError("set_type must be either val or train")
+
+
