@@ -199,6 +199,18 @@ def calculate_node_degrees(edge_index, num_nodes, num_nodes_2=None):
         return degrees
     
 
+def remove_label_noise_list(dataset, label_noise_dict):
+
+    # remove label noise from hetero_graph_list
+
+    for key in label_noise_dict.keys():
+        for idx in label_noise_dict[key]:
+            dataset.hetero_graphs.pop(idx)
+
+    dataset.hetero_graph_list = list(dataset.hetero_graphs.values())
+
+    
+
 def remove_label_noise(dataset, label_noise_dict):
 
     for key in label_noise_dict.keys():
@@ -206,3 +218,52 @@ def remove_label_noise(dataset, label_noise_dict):
             dataset.hetero_graphs.pop(idx)
 
     dataset.hetero_graph_list = list(dataset.hetero_graphs.values())
+
+
+def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False):
+    import copy
+
+    train_dataset = copy.deepcopy(cv_dataset)
+    val_dataset = copy.deepcopy(cv_dataset)
+    val_dataset.set_split("val", split)
+    train_dataset.set_split("train",split)
+    test_dataset = copy.deepcopy(final_test_dataset)
+    print(len(train_dataset))
+    print(len(val_dataset))
+    print(len(test_dataset))
+
+    # make sure that if data is read from file the classes are still the correct
+    #train_dataset.update_class(octa_dr_dict)
+    #val_dataset.update_class(octa_dr_dict)
+
+    # data imputation and normalization
+    hetero_graph_imputation(train_dataset)
+    hetero_graph_imputation(val_dataset)
+    hetero_graph_imputation(test_dataset)
+
+    # check if the datasets have an faz node type
+    node_types = ["graph_1", "graph_2"]
+    #try:
+    #    train_dataset[0]["faz"]
+    #    node_types.append("faz")
+    #except KeyError:
+    #    pass
+    #print(node_types)
+    if faz:
+        node_types.append("faz")
+
+    add_node_features(train_dataset, node_types)
+    add_node_features(val_dataset, node_types)
+    add_node_features(test_dataset, node_types)
+
+
+    node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset)
+    #node_mean_tensors = torch.load(f"../{data_type}_node_mean_tensors_global_node_node_degs.pt")
+    #node_std_tensors = torch.load(f"../{data_type}_node_std_tensors_global_node_node_degs.pt")
+
+
+    hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
+    hetero_graph_normalization(val_dataset, node_mean_tensors, node_std_tensors)
+    hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)
+
+    return train_dataset, val_dataset, test_dataset
