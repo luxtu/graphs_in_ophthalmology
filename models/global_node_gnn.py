@@ -14,6 +14,7 @@ class GNN_global_node(torch.nn.Module):
                  meta_data = None, 
                  num_pre_processing_layers = 3, 
                  num_post_processing_layers = 3, 
+                 num_final_lin_layers = 3,
                  batch_norm = True, 
                  conv_aggr = "cat", 
                  hetero_conns = True, 
@@ -52,6 +53,12 @@ class GNN_global_node(torch.nn.Module):
         self.num_pre_processing_layers = num_pre_processing_layers
         self.pre_processing_lin_layers = torch.nn.ModuleList()
         self.pre_processing_batch_norm = torch.nn.ModuleList()
+        self.num_final_lin_layers = num_final_lin_layers
+
+
+        self.final_lin_layers = torch.nn.ModuleList()
+
+
 
         for _ in range(self.num_pre_processing_layers):
             pre_lin_dict = torch.nn.ModuleDict()
@@ -81,6 +88,21 @@ class GNN_global_node(torch.nn.Module):
                     post_batch_norm_dict[node_type] = torch.nn.Identity()
             self.post_processing_lin_layers.append(post_lin_dict)
             self.post_processing_batch_norm.append(post_batch_norm_dict)
+
+        # handle the case where there is only one layer
+        if self.num_final_lin_layers == 1:
+            self.final_lin_layers.append(Linear(-1, out_channels))
+        else:
+            for i in range(self.num_final_lin_layers):
+
+                if i == 0:
+                    self.final_lin_layers.append(Linear(-1, hidden_channels))
+                elif i == self.num_final_lin_layers - 1:
+                    self.final_lin_layers.append(Linear(hidden_channels, out_channels))
+                else:
+                    self.final_lin_layers.append(Linear(hidden_channels, hidden_channels))
+
+
 
 
         self.final_conv_acts = {"graph_1": None, "graph_2": None}
@@ -198,7 +220,9 @@ class GNN_global_node(torch.nn.Module):
 
         # for each node type, aggregate over all nodes of that type
         type_specific_representations = []
-        for key in x.keys():
+        # no aggregation for the faz node
+        aggr_keys = ["graph_1", "graph_2"]
+        for key in aggr_keys:
             if isinstance(self.aggregation_mode, list):
                 for j in range(len(self.aggregation_mode)):
                     # check if the aggregation mode is global_add_pool
@@ -219,10 +243,20 @@ class GNN_global_node(torch.nn.Module):
         #x_start = F.dropout(x_start, p=0.5, training = self.training)
         #x = x_start
         #x = torch.cat([x_start, x], dim=1)
-        x = F.dropout(x, p=self.dropout, training = self.training)
+        #x = F.dropout(x, p=self.dropout, training = self.training)
 
-        return self.lin3(self.activation(self.lin2(self.activation(self.lin1(x)))))
+        for lin in self.final_lin_layers:
+            x = lin(x)
+            if lin != self.final_lin_layers[-1]:
+                x = self.activation(x)
+                x = F.dropout(x, p=self.dropout, training = self.training)
+        
+        return x
 
+
+
+
+      
 
         
     def forward_core(self, x_dict, edge_index_dict,  grads):
