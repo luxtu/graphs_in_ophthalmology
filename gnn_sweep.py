@@ -115,25 +115,30 @@ node_mean_tensors, node_std_tensors = prep.hetero_graph_normalization_params(tra
 prep.hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
 prep.hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)
 
+# remove label noise, samples to exclude are stored in label_noise.json
+with open("label_noise.json", "r") as file:
+    label_noise_dict = json.load(file)
+prep.remove_label_noise(train_dataset, label_noise_dict)
+
 
 with open("label_dict.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
-eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
-                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "equivalent_diameter"]}
-eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
-                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "centroid-0", "centroid-1", "feret_diameter_max", "equivalent_diameter", "orientation"]}
-# get positions of features to eliminate and remove them from the feature label dict and the graphs
-for key in eliminate_features.keys():
-    for feat in eliminate_features[key]:
-        idx = features_label_dict[key].index(feat)
-        features_label_dict[key].remove(feat)
-        for data in train_dataset:
-            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
-        for data in test_dataset:
-            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+#eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+#                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "equivalent_diameter"]}
+#eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+#                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "centroid-0", "centroid-1", "feret_diameter_max", "equivalent_diameter", "orientation"]}
+## get positions of features to eliminate and remove them from the feature label dict and the graphs
+#for key in eliminate_features.keys():
+#    for feat in eliminate_features[key]:
+#        idx = features_label_dict[key].index(feat)
+#        features_label_dict[key].remove(feat)
+#        for data in train_dataset:
+#            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+#        for data in test_dataset:
+#            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
 
 
 
@@ -152,8 +157,8 @@ node_types = ["graph_1", "graph_2"]
 
 agg_mode_dict = {"mean": global_mean_pool, "max": global_max_pool, "add": global_add_pool, "add_max": [global_add_pool, global_max_pool], "max_mean": [global_max_pool, global_mean_pool], "add_mean": [global_add_pool, global_mean_pool]}
 homogeneous_conv_dict = {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv, "gcn" : GCNConv}
-heterogeneous_conv_dict: {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv}
-activation_dict: {"relu":torch.nn.functional.relu, "leaky" : torch.nn.functional.leaky_relu, "elu":torch.nn.functional.elu}
+heterogeneous_conv_dict = {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv}
+activation_dict = {"relu":torch.nn.functional.relu, "leaky" : torch.nn.functional.leaky_relu, "elu":torch.nn.functional.elu}
 
 
 train_dataset.to(device)
