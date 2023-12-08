@@ -86,7 +86,7 @@ def custom_loss(out_diseased, out_stage, y):
 
 
 class graphClassifierHetero():
-    def __init__(self, model, loss_func, lr = 0.005, weight_decay = 5e-5, regression = False):
+    def __init__(self, model, loss_func, lr = 0.005, weight_decay = 5e-5, regression = False, smooth_label_loss = False):
 
         self.model = model
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -98,6 +98,7 @@ class graphClassifierHetero():
         self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
         self.lossFunc = loss_func
         self.regression = regression
+        self.smooth_label_loss = smooth_label_loss
 
     def train(self, loader, data_loss_dict = None):
         self.model.train()
@@ -110,18 +111,22 @@ class graphClassifierHetero():
         size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
         for data in loader:
             #data.to(self.device)
-            #pos_dict = {}
+            pos_dict = {}
             #print(data.y)
-            #for key in ["graph_1", "graph_2"]:
-            #    pos_dict[key] = data[key].pos
+            for key in ["graph_1", "graph_2"]:
+                pos_dict[key] = data[key].pos
             #out_dis, out_stage = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression)  # Perform a single forward pass.
-            out =  self.model(data.x_dict, data.edge_index_dict, data.batch_dict, regression =self.regression)  # Perform a single forward pass. #  pos_dict = pos_dict, 
+            out =  self.model(data.x_dict, data.edge_index_dict, data.batch_dict, regression =self.regression, pos_dict = pos_dict)  # Perform a single forward pass. #  pos_dict = pos_dict, 
             #print(out.shape)
             #print(data.y.shape)
 
+            # get the number of classes from the output
+            num_classes = out.shape[1]
 
-            loss = smoothed_label_loss(out, data.y, 3, self.lossFunc, self.device) 
-            #loss = multi_label_loss(out, data.y, 4, self.lossFunc, self.device)
+            if self.smooth_label_loss:
+                loss = smoothed_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+            else:
+                loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
 
             #loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
             loss.backward()  # Derive gradients.

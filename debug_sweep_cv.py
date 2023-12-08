@@ -60,18 +60,18 @@ octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 2, "Early NPDR": 1, "Late NPDR": 1
 label_names = ["Healthy/DM", "NPDR", "PDR"]
 
 
-vessel_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_vessel_graph"
-#label_file = "/media/data/alex_johannes/octa_data/Cairo/labels.csv"
-label_file = "/media/data/alex_johannes/octa_data/Cairo/splits"
-#void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
-#hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
+vessel_graph_path = f"../data/{data_type}_vessel_graph"
+#label_file = "../data/labels.csv"
+label_file = "../data/splits"
+#void_graph_path = f"../data/{data_type}_void_graph"
+#hetero_edges_path = f"../data/{data_type}_heter_edges"
 
-void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph_faz_node"
-hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges_faz_node"
+void_graph_path = f"../data/{data_type}_void_graph_faz_node"
+hetero_edges_path = f"../data/{data_type}_heter_edges_faz_node"
 
-faz_node_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_nodes"
-faz_region_edge_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_region_edges"
-faz_vessel_edge_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_faz_vessel_edges"
+faz_node_path = f"../data/{data_type}_faz_nodes"
+faz_region_edge_path = f"../data/{data_type}_faz_region_edges"
+faz_vessel_edge_path = f"../data/{data_type}_faz_vessel_edges"
 
 #vessel_graph_path = f"../{data_type}_vessel_graph"
 #void_graph_path = f"../{data_type}_void_graph"
@@ -80,7 +80,7 @@ faz_vessel_edge_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_f
 
 
 mode_cv = "cv"
-cv_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_cv}_dataset_faz.pkl"
+cv_pickle = f"../data/{data_type}_{mode_cv}_dataset_faz.pkl"
 cv_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
                                                         graph_path_2=void_graph_path,
                                                         graph_path_3=faz_node_path,
@@ -96,7 +96,7 @@ cv_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_
 
 
 mode_final_test = "final_test"
-final_test_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_final_test}_dataset_faz.pkl"
+final_test_pickle = f"../data/{data_type}_{mode_final_test}_dataset_faz.pkl"
 final_test_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
                                                         graph_path_2=void_graph_path,
                                                         graph_path_3=faz_node_path,
@@ -111,34 +111,42 @@ final_test_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1
                                                         )
 
 
-void_graph_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_void_graph"
-hetero_edges_path = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_heter_edges"
+#void_graph_path = f"../data/{data_type}_void_graph"
+#hetero_edges_path = f"../data/{data_type}_heter_edges"
+#
+#
+#mode_cv = "cv"
+#cv_pickle = f"../data/{data_type}_{mode_cv}_dataset.pkl"
+#cv_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
+#                                                        graph_path_2=void_graph_path,
+#                                                        hetero_edges_path_12=hetero_edges_path,
+#                                                        mode = mode_cv,
+#                                                        label_file = label_file, 
+#                                                        line_graph_1 =True, 
+#                                                        class_dict = octa_dr_dict,
+#                                                        pickle_file = cv_pickle #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
+#                                                        )
+#
+#
+#mode_final_test = "final_test"
+#final_test_pickle = f"../data/{data_type}_{mode_final_test}_dataset.pkl"
+#final_test_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
+#                                                        graph_path_2=void_graph_path,
+#                                                        hetero_edges_path_12=hetero_edges_path,
+#                                                        mode = mode_final_test,
+#                                                        label_file = label_file, 
+#                                                        line_graph_1 =True, 
+#                                                        class_dict = octa_dr_dict,
+#                                                        pickle_file = final_test_pickle #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
+#                                                        )
 
+octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 3, "Early NPDR": 1, "Late NPDR": 2}
+label_names = ["Healthy/DM", "Early NPDR", "Late NPDR", "PDR"]
+# update the label dict
 
-mode_cv = "cv"
-cv_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_cv}_dataset.pkl"
-cv_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
-                                                        graph_path_2=void_graph_path,
-                                                        hetero_edges_path_12=hetero_edges_path,
-                                                        mode = mode_cv,
-                                                        label_file = label_file, 
-                                                        line_graph_1 =True, 
-                                                        class_dict = octa_dr_dict,
-                                                        pickle_file = cv_pickle #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
-                                                        )
+final_test_dataset.update_class(octa_dr_dict)
+cv_dataset.update_class(octa_dr_dict)
 
-
-mode_final_test = "final_test"
-final_test_pickle = f"/media/data/alex_johannes/octa_data/Cairo/{data_type}_{mode_final_test}_dataset.pkl"
-final_test_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
-                                                        graph_path_2=void_graph_path,
-                                                        hetero_edges_path_12=hetero_edges_path,
-                                                        mode = mode_final_test,
-                                                        label_file = label_file, 
-                                                        line_graph_1 =True, 
-                                                        class_dict = octa_dr_dict,
-                                                        pickle_file = final_test_pickle #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
-                                                        )
 
 split = 1
 train_dataset, val_dataset, test_dataset = prep.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_config.faz_node)
@@ -261,7 +269,7 @@ def main():
         val_bal_acc = balanced_accuracy_score(y_true_val, y_pred_val)
         kappa = cohen_kappa_score(y_true_val, y_pred_val, weights="quadratic")
 
-        print(f"Val Acc: {val_acc:.4f}, Val Bal Acc: {val_bal_acc:.4f}, Kappa: {kappa:.4f}, Loss: {loss:.12f}")
+        print(f"Epoch: {epoch}, Val Acc: {val_acc:.4f}, Val Bal Acc: {val_bal_acc:.4f}, Kappa: {kappa:.4f}, Loss: {loss:.12f}")
 
         if val_bal_acc > best_val_bal_acc:
             best_val_bal_acc = val_bal_acc
