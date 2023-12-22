@@ -108,7 +108,7 @@ class RawDataExplainer():
 
 
 
-        relevant_vessels, relevant_regions, relevant_faz = self.identifiy_relevant_nodes(explanation, threshold = threshold, edge_threshold = edge_threshold, faz_node=faz_node)
+        relevant_vessels, relevant_regions, relevant_faz = self.identifiy_relevant_nodes(explanation,hetero_graph, threshold = threshold, edge_threshold = edge_threshold, faz_node=faz_node)
 
         #print("raw_data_regions")
         #print(relevant_regions)
@@ -123,6 +123,10 @@ class RawDataExplainer():
                     # also color the neighboring pixels if they exist
                     # create indices for the neighboring pixels
                     neigh_pix = np.array([[-1,0], [1,0], [0,-1], [0,1]])
+                    # include the 2nd order neighbors
+                    neigh_pix = np.concatenate((neigh_pix, np.array([[-1,-1], [-1,1], [1,-1], [1,1]])))
+                    # include the 3rd order neighbors
+                    neigh_pix = np.concatenate((neigh_pix, np.array([[-2,0], [2,0], [0,-2], [0,2]])))
                     # convert pos to int
                     pos = np.array([int(pos[0]), int(pos[1])]).astype(int)
                     for neigb_pos in neigh_pix:
@@ -179,6 +183,12 @@ class RawDataExplainer():
             regions[region_labels == label] = dyn_region_label
             dyn_region_label += 1
 
+        if faz_node and relevant_faz is not None:
+            alphas[region_labels == faz_region_label] = 0.85
+            regions[region_labels == faz_region_label] = dyn_region_label
+            dyn_region_label += 1
+
+
 
 
         fig, ax  = plt.subplots(1,2, figsize=(20,10))
@@ -186,16 +196,21 @@ class RawDataExplainer():
         #ax[1].imshow(seg)
         #ax[2].imshow(region_labels)
         ax[0].imshow(raw, alpha = alphas, cmap="gray")
-        ax[0].imshow(cl_arr,  alpha=cl_arr, cmap="Reds", vmin=0, vmax=1)
+        ax[0].imshow(cl_arr,  alpha=cl_arr, cmap="Greys_r", vmin=0, vmax=1)
 
         ax[1].imshow(regions,  alpha=alphas)
-        ax[1].imshow(cl_arr,  alpha=cl_arr, cmap="Reds", vmin=0, vmax=1)
+        ax[1].imshow(cl_arr,  alpha=cl_arr, cmap="Greys_r", vmin=0, vmax=1)
 
         #ax.imshow(alphas, cmap="gray")
 
         # plot the center of the relevant regions
-        ax[0].scatter(pos[:,1], pos[:,0], c="red", s=15, alpha=0.5)
-        ax[1].scatter(pos[:,1], pos[:,0], c="red", s=15, alpha=0.5)
+        #ax[0].scatter(pos[:,1], pos[:,0], c="red", s=15, alpha=0.5)
+        #ax[1].scatter(pos[:,1], pos[:,0], c="red", s=15, alpha=0.5)
+
+        # plot center of faz region if it is relevant
+        #if faz_node and relevant_faz is not None:
+        #    ax[0].scatter(600, 600, c="red", s=15, alpha=0.5)
+        #    ax[1].scatter(600, 600, c="red", s=15, alpha=0.5)
 
         if path is not None:
             plt.tight_layout()
@@ -206,7 +221,7 @@ class RawDataExplainer():
 
 
 
-    def identifiy_relevant_nodes(self, explanation_graph, threshold="adaptive", edge_threshold="adaptive", faz_node=False):
+    def identifiy_relevant_nodes(self, explanation_graph, hetero_graph, threshold="adaptive", edge_threshold="adaptive", faz_node=False):
 
         graph_1_name = "graph_1"
         graph_2_name = "graph_2"
@@ -230,7 +245,7 @@ class RawDataExplainer():
 
             sorted_node_value = torch.sort(node_value, descending=True)[0]
             # get rid of the nodes that contribute less than 0.1% to the total gradient
-            sorted_node_value = sorted_node_value[sorted_node_value > 0.001 * total_grad]
+            sorted_node_value = sorted_node_value[sorted_node_value > 0.0005 * total_grad]
 
 
             cum_sum = torch.cumsum(sorted_node_value, dim=0)
@@ -245,6 +260,18 @@ class RawDataExplainer():
         het_graph1_rel_pos = explanation_graph.node_mask_dict[graph_1_name].abs().sum(dim=-1) > threshold
         het_graph2_rel_pos = explanation_graph.node_mask_dict[graph_2_name].abs().sum(dim=-1) > threshold
 
+        het_graph1_rel_pos = het_graph1_rel_pos.cpu().detach().numpy()
+        het_graph2_rel_pos = het_graph2_rel_pos.cpu().detach().numpy()
+
+        # remove the nodes from the corner
+
+        het_graph1_pos = hetero_graph[graph_1_name].pos.cpu().detach().numpy()
+        het_graph2_pos = hetero_graph[graph_2_name].pos.cpu().detach().numpy()
+
+
+        het_graph1_rel_pos = het_graph1_rel_pos & (het_graph1_pos[:,0] < 1100) & (het_graph1_pos[:,1] > 100) 
+        het_graph2_rel_pos = het_graph2_rel_pos & (het_graph2_pos[:,0] < 1100) & (het_graph2_pos[:,1] > 100)
+
 
         if faz_node:
             het_graph3_rel_pos = explanation_graph.node_mask_dict[graph_3_name].abs().sum(dim=-1) > threshold
@@ -252,5 +279,5 @@ class RawDataExplainer():
         else:
             het_graph3_rel_pos = None
 
-        return np.where(het_graph1_rel_pos.cpu().detach().numpy())[0], np.where(het_graph2_rel_pos.cpu().detach().numpy())[0], np.where(het_graph3_rel_pos)[0]
+        return np.where(het_graph1_rel_pos)[0], np.where(het_graph2_rel_pos)[0], np.where(het_graph3_rel_pos)[0]
 
