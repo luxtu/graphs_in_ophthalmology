@@ -269,7 +269,7 @@ class HeteroGraphPlotter2D():
             #[:,self.cls]
             #[:,self.cls]
 
-            plt.colorbar(sc2)
+            plt.colorbar(sc2, label = "Node Importance")
         else:
             ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0],alpha = 0.8, s = 8)
             ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0],alpha = 0.8, s = 12, marker = "s")
