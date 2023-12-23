@@ -244,9 +244,9 @@ for idx, data in enumerate(gnnexp_loader):
         baseline_graph_2 = torch.zeros_like(data.x_dict["graph_2"]).unsqueeze(0)
         baseline_faz = torch.zeros_like(data.x_dict["faz"], device= device).unsqueeze(0)
 
-    elif baseline_type == "lookup":
-        baseline_graph_1 = lookup_tree.get_k_nearst_neighbors_avg_features("graph_1", data["graph_1"].pos.cpu().numpy(), 100).unsqueeze(0)
-        baseline_graph_2 = lookup_tree.get_k_nearst_neighbors_avg_features("graph_2", data["graph_2"].pos.cpu().numpy(), 100).unsqueeze(0)
+    elif baseline_type == "lookup": #get_k_nearst_neighbors_avg_features
+        baseline_graph_1 = lookup_tree.get_k_nearst_neighbors_avg_features_quantile_correct("graph_1", data["graph_1"].pos.cpu().numpy(), 100).unsqueeze(0)
+        baseline_graph_2 = lookup_tree.get_k_nearst_neighbors_avg_features_quantile_correct("graph_2", data["graph_2"].pos.cpu().numpy(), 100).unsqueeze(0)
         baseline_faz = torch.zeros_like(data.x_dict["faz"], device= device).unsqueeze(0)
 
     #print(f"Baseline Graph 1 shape: {baseline_graph_1.shape}")
@@ -278,10 +278,12 @@ for idx, data in enumerate(gnnexp_loader):
     explanation = explainer(data.x_dict, data.edge_index_dict,target =target,  batch_dict = data.batch_dict,  grads = False)#, index= 0 # # pos_dict = pos_dict,
     # for GNN Explainer forces sparsity, thres
     threshold = "adaptive"
-    torch_geom_explanation.visualize_feature_importance(explanation,data,  f'explain_out/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_{threshold}_attributes.png', features_label_dict, top_k = 50, threshold= threshold)
+    torch_geom_explanation.visualize_feature_importance(explanation,data,  f'explain_out/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_{threshold}_quantile_attributes.png', features_label_dict, top_k = 50, threshold= threshold)
+    #without threshold
+    torch_geom_explanation.visualize_feature_importance(explanation,data,  f'explain_out/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_no_threshold_quantile_attributes.png', features_label_dict, top_k = 50)
     #torch_geom_explanation.visualize_relevant_subgraph(explanation, data, f"explain_out/subgraph_{data_label}_{explain_type}_{run_id}_attributes.png", threshold = "adaptive", edge_threshold = "adaptive", edges = edges, faz_node= faz_node_bool) #"adaptive"
     #graph_2D.HeteroGraphPlotter2D().plot_graph_2D_faz(data, edges= True, path = f"explain_out/fullgraph_{data_label}_{explain_type}.png")
-    torch_geom_explanation.visualize_node_importance_histogram(explanation, f"explain_out/node_hist_{data_label}_{explain_type}_{baseline_type}_{run_id}_attributes.png", faz_node= faz_node_bool)
+    torch_geom_explanation.visualize_node_importance_histogram(explanation, f"explain_out/node_hist_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes.png", faz_node= faz_node_bool)
     #break
 
     segmentation_path = f"../data/{data_type}_seg"
@@ -304,7 +306,7 @@ for idx, data in enumerate(gnnexp_loader):
         verticalalignment='top', bbox=dict(boxstyle='square', facecolor='grey', alpha=1))
 
 
-    torch_geom_explanation.visualize_relevant_subgraph(explanation, data, f"explain_out/overlay_subgraph_{data_label}_{baseline_type}_{run_id}.png", 
+    torch_geom_explanation.visualize_relevant_subgraph(explanation, data, f"explain_out/overlay_subgraph_{data_label}_{baseline_type}_{run_id}_quantile.png", 
                                                             threshold = "adaptive",
                                                             edge_threshold = "adaptive",
                                                             edges = edges, 
@@ -337,5 +339,5 @@ for idx, data in enumerate(gnnexp_loader):
         plotter2d.plot_graph_2D(data ,edges= False, pred_val_dict = importance_dict, ax = ax)
     fig.legend()
     plt.tight_layout()
-    plt.savefig(f'explain_out/integrate_gradients_{data_label}_plot_{baseline_type}_{run_id}_final.png' ) 
+    plt.savefig(f'explain_out/integrate_gradients_{data_label}_plot_{baseline_type}_{run_id}_final_quantile.png' ) 
     plt.close()
