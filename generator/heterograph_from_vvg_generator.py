@@ -139,7 +139,10 @@ class HeterographFromVVGGenerator:
 
         if image_file is not None:
             image = Image.open(os.path.join(self.image_path, image_file))
-            image = np.array(image)[:,:,0]
+            try:
+                image = np.array(image)[:,:,0]
+            except IndexError:
+                image = np.array(image)
             image = transform.resize(image, seg.shape, order = 0, preserve_range = True)
 
             #image = image.astype(np.uint8)
@@ -397,7 +400,7 @@ class HeterographFromVVGGenerator:
 
 
         vvg_df_edges, vvg_df_nodes = vvg_loader.vvg_to_df(os.path.join(self.vvg_path, vvg_file))
-        cl_arr = vvg_tools.vvg_df_to_centerline_array(vvg_df_edges,vvg_df_nodes, seg_shape, debug = self.debug)
+        cl_arr = vvg_tools.vvg_df_to_centerline_array(vvg_df_edges,vvg_df_nodes, seg_shape) # debug = self.debug
 
         #if self.debug:
         #    fig, ax = plt.subplots(figsize=(10, 10))
