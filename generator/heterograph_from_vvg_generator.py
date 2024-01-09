@@ -56,12 +56,27 @@ class HeterographFromVVGGenerator:
 
         # OD = True
         # OS = False
-        seg_file_eye = [True if "_OD" in file else False for file in seg_files]
-        vvg_file_eye = [True if "_OD" in file else False for file in vvg_files]
+
+        # extract the eye from the filename, OD = True, OS = False, if the filename does not contain "_OD" or "_OS" the eye is set to None
+        seg_file_eye = [True if "_OD" in file else False if "_OS" in file else None for file in seg_files]
+        vvg_file_eye = [True if "_OD" in file else False if "_OS" in file else None for file in vvg_files]
+
+        # check that the files contain either "_OD" or "_OS", otherwise the matching will not work
+
 
         if image_files is not None:
             image_file_indx = [re.findall(pattern, file)[0] for file in image_files]
-            image_file_eye = [True if "_OD" in file else False for file in image_files]
+            image_file_eye = [True if "_OD" in file else False if "_OS" in file else None for file in image_files]
+
+            # check if there are None values in the eye lists, raise an error if there are
+            if None in seg_file_eye or None in vvg_file_eye or None in image_file_eye:
+                raise ValueError("Some of the filenames do not contain either '_OD' or '_OS'")
+
+            print([re.findall(pattern, file) for file in image_files])
+        else:
+            # check if there are None values in the eye lists, raise an error if there are
+            if None in seg_file_eye or None in vvg_file_eye:
+                raise ValueError("Some of the filenames do not contain either '_OD' or '_OS'")
 
 
         for i, seg_file in enumerate(seg_files):
@@ -109,7 +124,6 @@ class HeterographFromVVGGenerator:
                 if found_match:
                     break
 
-
     def save_region_graphs(self):
         
         seg_files = os.listdir(self.seg_path)
@@ -150,11 +164,10 @@ class HeterographFromVVGGenerator:
         ## region properties don't make sense with extremely small regions, also they probably come from failed segmentation
         region_labels = measure.label(morphology.remove_small_holes(seg, area_threshold=5, connectivity=1).astype("uint8"), background=1)
 
-
         if self.debug:
             fig, ax = plt.subplots(figsize=(10, 10))
             ax.imshow(region_labels)
-            
+        
         if self.image_path is not None:
             props = measure.regionprops_table(region_labels,intensity_image=image, 
                                               properties=('centroid',
@@ -212,12 +225,12 @@ class HeterographFromVVGGenerator:
             ## adjust labels of the regions
             df.index = np.arange(len(df))
 
-
         try:
             edge_index_df, edge_index_region_vessel_df, faz_region_df, faz_vessel_df  = self.generate_edge_index(region_labels, vvg_file)
         except json.decoder.JSONDecodeError:
             print("JSONDecodeError")
             return None
+
 
         if not self.debug:
 
@@ -243,6 +256,7 @@ class HeterographFromVVGGenerator:
             df.to_csv(region_node_file, sep = ";")
             edge_index_df.to_csv(region_edges_file, sep = ";")
             edge_index_region_vessel_df.to_csv(region_vessel_edges_file, sep = ";")
+
         else:
             # plot the nodes
             ax.scatter(df["centroid-1"], df["centroid-0"], s = 8, c= "orange")
