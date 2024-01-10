@@ -170,7 +170,7 @@ prep.remove_label_noise(train_dataset, label_noise_dict)
 
 
 
-with open("label_dict.json", "r") as file:
+with open("feature_name_dict.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)

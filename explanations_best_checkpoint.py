@@ -167,7 +167,7 @@ train_dataset, val_dataset, test_dataset = prep.adjust_data_for_split(cv_dataset
 #print(test_dataset[0])
 #print(test_dataset[0]["graph_1"].x)
 
-with open("label_dict_new.json", "r") as file:
+with open("feature_name_dict_new.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)

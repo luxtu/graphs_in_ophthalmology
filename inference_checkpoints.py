@@ -154,7 +154,7 @@ for chekpoint_file, run_id in zip(check_point_files, run_ids):
     print(split)
     _, _, test_dataset = prep.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = True)
 
-    with open("label_dict.json", "r") as file:
+    with open("feature_name_dict.json", "r") as file:
         label_dict_full = json.load(file)
         #features_label_dict = json.load(file)
     features_label_dict = copy.deepcopy(label_dict_full)
@@ -185,6 +185,8 @@ for chekpoint_file, run_id in zip(check_point_files, run_ids):
     test_loader_set = DataLoader(test_dataset[:4], batch_size = 4, shuffle=False)
     test_loader_full = DataLoader(test_dataset, batch_size = 64, shuffle=False)
 
+    print(test_dataset[0])
+
     # must run on an input to set the parameters
     # load the state dict
     clf.predict(test_loader_set)
@@ -209,5 +211,8 @@ for chekpoint_file, run_id in zip(check_point_files, run_ids):
     df_metrics = pd.concat([df_metrics, pd.DataFrame(metrics, index = [split])])
     df_report = pd.concat([df_report, pd.DataFrame(report).transpose()])
 
-df_metrics.to_csv('GNN_CV_metrics_3class.csv')
-df_report.to_csv('GNN_CV_report_3class.csv')
+#df_metrics.to_csv('GNN_CV_metrics_3class.csv')
+#df_report.to_csv('GNN_CV_report_3class.csv')
+
+print(df_metrics)
+print(df_report)

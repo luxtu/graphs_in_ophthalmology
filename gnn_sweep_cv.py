@@ -21,7 +21,7 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 # Define sweep config
 sweep_configuration = {
     "method": "random",
-    "name": "3 Class Bayes, Split 1, Optional Loss Eliminated Features No FAZ Node No Attention",
+    "name": "3 Class Bayes, Split 3, Optional Loss Eliminated Features No FAZ Node No Attention _ Repeat",
     "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
         "batch_size": {"values": [8, 16, 32, 64]},
@@ -45,7 +45,7 @@ sweep_configuration = {
         "heterogeneous_conv": {"values": ["gat", "sage", "graph"]},
         "activation": {"values": ["relu", "leaky", "elu"]},
         "faz_node": {"values": [True]},
-        "split": {"values": [1]},
+        "split": {"values": [3]},
         "start_rep": {"values": [True, False]},
         "aggr_faz": {"values": [True, False]},
         "smooth_label_loss": {"values": [True, False]},
@@ -151,7 +151,7 @@ train_dataset, val_dataset, test_dataset = prep.adjust_data_for_split(cv_dataset
 #prep.remove_label_noise(train_dataset, label_noise_dict)
 
 
-with open("label_dict.json", "r") as file:
+with open("feature_name_dict.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
