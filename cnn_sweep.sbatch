@@ -8,12 +8,6 @@
 #SBATCH -t 3-12:00:00
 
 
-# Set your API key (replace 'YOUR_API_KEY' with your actual API key)
-API_KEY= 6e4b754c329fb92daa33fb7ed96d9ef6db220d9f
-
-# Log in to wandb using your API key
-wandb login $API_KEY
-
 # Set the path to your virtual environment's activate script
 VENV_PATH=.venv/bin/activate
 
