@@ -15,3 +15,4 @@ env/
 .venv/
 explain_out/
 debug_notebooks/
+scripts/
