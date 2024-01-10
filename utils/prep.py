@@ -78,9 +78,11 @@ def hetero_graph_imputation(dataset):
 #        res = torch.cat([data["global"].x, res]) if res is not None else data["global"].x
 #
 #    return torch.mean(res, dim=0), torch.std(res, dim=0)
+                
 
 
-def hetero_graph_normalization_params(train_dataset):
+
+def hetero_graph_normalization_params(train_dataset, clean = False):
 
     # iterable dataset
     try:
@@ -100,8 +102,21 @@ def hetero_graph_normalization_params(train_dataset):
             node_tensors[key] = torch.cat([node_tensors[key], val]) if node_tensors[key] is not None else val
 
     for key, val in node_tensors.items():
-        node_mean_tensors[key] = torch.mean(val, dim=0)
-        node_std_tensors[key] = torch.std(val, dim=0)
+        if clean and key == "graph_1":
+            # if in the matrix there are values that are <=0 then we want to ignore them
+            # and only use the values that are >0
+
+            # find the indices of the values that are >0
+            idx = torch.where(val > 0)[0]
+            # select only the values that are >0
+            val = val[idx]
+            # calculate the mean and std
+            node_mean_tensors[key] = torch.mean(val, dim=0)
+            node_std_tensors[key] = torch.std(val, dim=0)
+
+        else:
+            node_mean_tensors[key] = torch.mean(val, dim=0)
+            node_std_tensors[key] = torch.std(val, dim=0)
 
     return node_mean_tensors, node_std_tensors
 
@@ -222,15 +237,16 @@ def remove_label_noise(dataset, label_noise_dict):
 
 def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False):
     import copy
+    import torch
 
     train_dataset = copy.deepcopy(cv_dataset)
     val_dataset = copy.deepcopy(cv_dataset)
     val_dataset.set_split("val", split)
     train_dataset.set_split("train",split)
     test_dataset = copy.deepcopy(final_test_dataset)
-    print(len(train_dataset))
-    print(len(val_dataset))
-    print(len(test_dataset))
+    print(f"train dataset: {len(train_dataset)}")
+    print(f"val dataset: {len(val_dataset)}")
+    print(f"test dataset: {len(test_dataset)}")
 
     # make sure that if data is read from file the classes are still the correct
     #train_dataset.update_class(octa_dr_dict)
@@ -257,7 +273,22 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False):
     add_node_features(test_dataset, node_types)
 
 
-    node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset)
+    node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset, clean= False)
+    #print(node_mean_tensors)
+    #print(node_std_tensors)
+    #node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset, clean = True)
+    #print(node_mean_tensors)
+    #print(node_std_tensors)
+
+    # why are they not the same?
+    
+
+
+
+
+    # save the normalization parameters
+    #torch.save(node_mean_tensors, f"../../OCTA_500_RELEVANT/DCP_node_mean_tensors_faz_{faz}_from_CV.pt")
+    #torch.save(node_std_tensors, f"../../OCTA_500_RELEVANT/DCP_node_std_tensors__faz_{faz}_from_CV.pt")
     #node_mean_tensors = torch.load(f"../{data_type}_node_mean_tensors_global_node_node_degs.pt")
     #node_std_tensors = torch.load(f"../{data_type}_node_std_tensors_global_node_node_degs.pt")
 
