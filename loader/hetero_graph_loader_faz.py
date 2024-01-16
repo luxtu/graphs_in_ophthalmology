@@ -259,6 +259,10 @@ class HeteroGraphLoaderTorch:
         files = [file for file in files if ".csv" in file]
         node_dict = {}
         edge_dict = {}
+        edge_index_col = True
+        node_index_col = True
+
+
         for file in sorted(files):
             idx = re.findall(r'\d+', str(file))[0]
 
@@ -275,15 +279,41 @@ class HeteroGraphLoaderTorch:
                     continue
 
             if "edges" in str(file):
+                # check if there is a first column with the name "id"
+                # if yes, use this as index column
+                if edge_index_col:
+                    try:
+                        test_edge_df = pd.read_csv(os.path.join(
+                            graph_path, file), sep=";")#"id"
+                        if "id" == test_edge_df.columns[0] or "Unnamed: 0" == test_edge_df.columns[0]:
+                            edge_index_col = 0
+                        else:
+                            edge_index_col = None
+                    except pd.errors.EmptyDataError:
+                        pass
+
                 try:
                     edge_dict[idx_dict] = pd.read_csv(os.path.join(
-                        graph_path, file), sep=";", index_col=0)#"id"
+                        graph_path, file), sep=";", index_col= edge_index_col)#"id"
                 except pd.errors.EmptyDataError:
                     pass
+
             elif "nodes" in str(file):
+                # check if there is a first column with the name "id"
+                # if yes, use this as index column
+                if node_index_col:
+                    try:
+                        test_node_df = pd.read_csv(os.path.join(
+                            graph_path, file), sep=";")#"id"
+                        if "id" == test_node_df.columns[0] or "Unnamed: 0" == test_node_df.columns[0]:
+                            node_index_col = 0
+                        else:
+                            node_index_col = None
+                    except pd.errors.EmptyDataError:
+                        pass
                 try:
                     node_dict[idx_dict] = pd.read_csv(os.path.join(
-                        graph_path, file), sep=";", index_col=0)#"id"
+                        graph_path, file), sep=";", index_col=node_index_col)#"id"
                 except pd.errors.EmptyDataError:
                     pass
 
@@ -444,6 +474,7 @@ class HeteroGraphLoaderTorch:
             eye = True if "_OD" in key else False
 
             # create the hetero graph
+            #print(key)
             het_graph = self.create_hetero_graph(graph_1, graph_2, graph_3, het_edge_index, het_edge_index_13, het_edge_index_23, eye)
             het_graph_dict[key] = het_graph
 
@@ -467,12 +498,9 @@ class HeteroGraphLoaderTorch:
             het_graph['graph_2', 'to', 'graph_2'].edge_index = graph_2.edge_index
             het_graph['graph_1', 'to', 'graph_2'].edge_index = het_edge_index_12
 
+            # this sets the id for the faz node to 0 in the edge index
             het_edge_index_13[1] = 0
             het_edge_index_23[0] = 0
-
-            #print(het_edge_index_13)
-            #print("################################")
-            #print(het_edge_index_23)
 
 
             het_graph['graph_1', 'to', 'faz'].edge_index = het_edge_index_13
@@ -567,30 +595,6 @@ class HeteroGraphLoaderTorch:
             #self.hetero_graphs = het_graphs
             # update the hetero_graph_list
             self.hetero_graph_list = list(het_graphs.values())
-
-        #elif set_type == "final_test":
-        #    # load the split
-        #    label_file = self.label_file + "/split_0.csv"
-        #    
-        #    label_data = pd.read_csv(label_file)
-        #    # get the keys of the graphs in the split
-        #    keys = []
-        #    # keys are the subject ids with leading zeros and the eye
-        #    for i, row in label_data.iterrows():
-        #        index = row["Subject"]
-        #        # convert to string with leading zeros, 4 digits
-        #        index = str(index).zfill(4)
-        #        eye = row["Eye"]
-        #        keys.append(index + "_" + eye)
-#
-        #    # remove all graphs from the dict that are not in the split
-        #    for key in self.hetero_graphs.keys():
-        #        if key not in label_data.keys():
-        #            del het_graphs[key]
-        #    # update the hetero_graphs
-        #    #self.hetero_graphs = het_graphs
-        #    # update the hetero_graph_list
-        #    self.hetero_graph_list = list(het_graphs.values())
 
 
         else:
