@@ -218,8 +218,6 @@ else:
 explain_type = "IntegratedGradients"  #IntegratedGradients" #Saliency"
 
 gnnexp_loader = DataLoader(test_dataset, batch_size = 1, shuffle=False)
-
-data_label = "DCP"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
@@ -272,72 +270,32 @@ for idx, data in enumerate(gnnexp_loader):
     target = explainer.get_target(prediction)
     print(f"Target: {target}, (Predicted Class)")
     print(f"True Label: {data.y[0]}")
-    #pos_dict = {}
-    #for key in ["graph_1", "graph_2"]:
-    #    pos_dict[key] = data[key].pos.requires_grad_(False)
-    explanation = explainer(data.x_dict, data.edge_index_dict,target =target,  batch_dict = data.batch_dict,  grads = False)#, index= 0 # # pos_dict = pos_dict,
+
+    explanation = explainer(data.x_dict, data.edge_index_dict,target =target,  batch_dict = data.batch_dict,  grads = False)
     # for GNN Explainer forces sparsity, thres
     threshold = "adaptive"
-    torch_geom_explanation.visualize_feature_importance(explanation,data,  f'explain_out/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_{threshold}_quantile_attributes.png', features_label_dict, top_k = 50, threshold= threshold)
+    importance_threshold_path = f'explain_out/feature_importance/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_{threshold}_quantile_attributes_new.png'
+    torch_geom_explanation.visualize_feature_importance(explanation,data,  importance_threshold_path, features_label_dict, threshold= threshold)
     #without threshold
-    torch_geom_explanation.visualize_feature_importance(explanation,data,  f'explain_out/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_no_threshold_quantile_attributes.png', features_label_dict, top_k = 50)
+    importance_path = f'explain_out/feature_importance/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_no_threshold_quantile_attributes_new.png'
+    torch_geom_explanation.visualize_feature_importance(explanation,data, importance_path, features_label_dict)
     #torch_geom_explanation.visualize_relevant_subgraph(explanation, data, f"explain_out/subgraph_{data_label}_{explain_type}_{run_id}_attributes.png", threshold = "adaptive", edge_threshold = "adaptive", edges = edges, faz_node= faz_node_bool) #"adaptive"
-    #graph_2D.HeteroGraphPlotter2D().plot_graph_2D_faz(data, edges= True, path = f"explain_out/fullgraph_{data_label}_{explain_type}.png")
-    torch_geom_explanation.visualize_node_importance_histogram(explanation, f"explain_out/node_hist_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes.png", faz_node= faz_node_bool)
-    #break
+    #graph_2D.HeteroGraphPlotter2D().plot_graph_2D_faz(data, edges= True, path = f"explain_out/fullgraph/fullgraph_{data_label}_{explain_type}.png")
+    #torch_geom_explanation.visualize_node_importance_histogram(explanation, f"explain_out/histogram/node_hist_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes_new.png", faz_node= faz_node_bool)
 
+    torch_geom_explanation.store_relevant_nodes_csv(explanation, data,  f"explain_out/csv_out/", features_label_dict , faz_node=faz_node_bool)
+
+    # generate overlay image
     segmentation_path = f"../data/{data_type}_seg"
     json_path = f"../data/{data_type}_json"
     image_path = f"../data/{data_type}_images"
 
 
     raw_data_explainer = explanation_in_raw_data.RawDataExplainer(raw_image_path= image_path, segmentation_path= segmentation_path, vvg_path= json_path)
-    #raw_data_explainer.create_explanation_image(explanation,data, data_label, f"explain_out/overlay_{data_label}_{run_id}.png", faz_node= faz_node_bool, threshold = "adaptive", edge_threshold = "adaptive")
+    overlay_path = f"explain_out/overlay/overlay_subgraph_{data_label}_{baseline_type}_{run_id}_quantile_new.png"
+    raw_data_explainer.create_explanation_image(explanation, data, data_label, path=overlay_path, faz_node= faz_node_bool, threshold = "adaptive", edge_threshold = "adaptive", label_names=label_names, target = target)
 
 
-    graph_ax = raw_data_explainer.create_explanation_image(explanation,data,data_label, path=None, faz_node= faz_node_bool, threshold = "adaptive", edge_threshold = "adaptive")
-    # add a legend with the True label and the predicted label
+    heatmap_path = f"explain_out/heatmap/integrate_gradients_{data_label}_{baseline_type}_{run_id}_quantile_new.png"
+    torch_geom_explanation.integrate_gradients_heatmap(explanation, data, heatmap_path, faz_node= faz_node_bool)
 
-    textstr = '\n'.join((
-        "True Label: %s" % (label_names[data.y[0].item()], ),
-        "Predicted Label: %s" % (label_names[y_prob_test.argmax(axis = 1)[idx]], )))
-
-    graph_ax[1].text(0.6, 0.98, textstr, transform=graph_ax[1].transAxes, fontsize=16,
-        verticalalignment='top', bbox=dict(boxstyle='square', facecolor='grey', alpha=1))
-
-
-    torch_geom_explanation.visualize_relevant_subgraph(explanation, data, f"explain_out/overlay_subgraph_{data_label}_{baseline_type}_{run_id}_quantile.png", 
-                                                            threshold = "adaptive",
-                                                            edge_threshold = "adaptive",
-                                                            edges = edges, 
-                                                            faz_node= faz_node_bool,
-                                                            ax=graph_ax) #"adaptive"
-
-    fig, ax = plt.subplots()
-    # add titles for each subplot in the figu
-    # add legend to the figure that assigns the square marker ("s") to the intercapillary region and the circle marker to the vessel region    
-    if faz_node_bool:
-        legend_items = [
-            plt.Line2D([0], [0], marker='s', color='red', alpha = 0.8, label='ICP Region', markerfacecolor='red', markersize=6, linestyle='None'),
-            plt.Line2D([0], [0], marker='o', color='red', alpha = 0.8, label='Vessel', markerfacecolor='red', markersize=6, linestyle='None'),
-            plt.Line2D([0], [0], marker="D", color='red', alpha = 0.8, label='Fovea', markerfacecolor='blue', markersize=6, linestyle='None'),
-        ]
-    else:
-        legend_items = [
-            plt.Line2D([0], [0], marker='s', color='red', alpha = 0.8, label='ICP Region', markerfacecolor='red', markersize=6, linestyle='None'),
-            plt.Line2D([0], [0], marker='o', color='red', alpha = 0.8, label='Vessel', markerfacecolor='red', markersize=6, linestyle='None'),
-        ]
-
-    plotter2d = graph_2D.HeteroGraphPlotter2D()
-    #plotter2d.set_val_range(1, 0)
-    importance_dict = {}
-    for key in explanation.x_dict.keys():
-        importance_dict[key] = explanation.x_dict[key].abs().sum(dim=-1) 
-    if faz_node_bool:
-        plotter2d.plot_graph_2D_faz(data ,edges= False, pred_val_dict = importance_dict, ax = ax)
-    else:
-        plotter2d.plot_graph_2D(data ,edges= False, pred_val_dict = importance_dict, ax = ax)
-    fig.legend()
-    plt.tight_layout()
-    plt.savefig(f'explain_out/integrate_gradients_{data_label}_plot_{baseline_type}_{run_id}_final_quantile.png' ) 
-    plt.close()
