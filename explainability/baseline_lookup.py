@@ -72,11 +72,8 @@ class Baseline_Lookup():
     
 
     def get_k_nearst_neighbors_avg_features(self, node_type, pos, k):
-        """
-        This function returns the k nearest neighbors of a node of a specific type.
-        """
-        dist, ind = self.trees[node_type].query(pos, k=k)
 
+        dist, ind = self.trees[node_type].query(pos, k=k)
         avg = self.nodes[node_type][ind, :].mean(axis=1) # axis = 1 for featurewise mean over all neighbors
         # axis = 0 are all the baseline nodes
         # axis = 1 are the neighbors of the baseline nodes
@@ -88,74 +85,37 @@ class Baseline_Lookup():
         # set all values <-1 to -1
         avg[avg < -1] = -1
 
-        # print the average for each feature
-        print(avg.mean(axis=0))
-
         return avg
 
         
     
 
     def get_k_nearst_neighbors_avg_features_quantile_correct(self, node_type, pos, k, lower_quantile = 0.1, upper_quantile = 0.9):
-        """
-        This function returns the k nearest neighbors of a node of a specific type.
-        """
+
+        # query the spatially k nearest neighbors for each node
         dist, ind = self.trees[node_type].query(pos, k=k)
         neighbors = self.nodes[node_type][ind, :]
         # axis = 0 are all the baseline nodes
         # axis = 1 are the neighbors of the baseline nodes
         # axis = 2 are the features of the nodes
-#
-        #avg = torch.zeros((neighbors.shape[0], neighbors.shape[2]), device = neighbors.device)
-#
-        ## for each node and each feature, check if the value is in the quantile range
-#
-        #for n_i in range(neighbors.shape[0]):
-        #    for f_i in range(neighbors.shape[2]):
-        #        # get the quantiles for each feature and each node
-        #        lower = torch.quantile(neighbors[n_i, :, f_i], lower_quantile)
-        #        upper = torch.quantile(neighbors[n_i, :, f_i], upper_quantile)
-#
-        #        # where the lowe quantule is the same as the upper quantile, set the upper quantile to 1000 and the lower to -1000
-        #        if lower == upper:
-        #            upper = 1000
-        #            lower = -1000
-#
-        #        # for each node calculate the mean of the neighbors that are in the quantile range
-        #        avg[n_i, f_i] = neighbors[n_i, (neighbors[n_i, :, f_i] > lower) & (neighbors[n_i, :, f_i] < upper), f_i].mean()
-        #        # if the mean is nan, try the mean of the whole neighborhood
-        #        if torch.isnan(avg[n_i, f_i]):
-        #            avg[n_i, f_i] = neighbors[n_i, :, f_i].mean()
-        #        # if the mean is still nan, set it to zero
-#
-        #        if torch.isnan(avg[n_i, f_i]):
-        #            avg[n_i, f_i] = 0
-        #            print(lower, upper)
-        #            print(neighbors[n_i, :, f_i])
-#
-        ## set all values >1 to 1
-        #avg[avg > 1] = 1
-        ## set all values <-1 to -1
-        #avg[avg < -1] = -1
-#
-        ## print the average for each feature
-        #print(avg.mean(axis=0))
 
+        # calculate the quantiles for each node
         lower_quantiles = torch.quantile(neighbors, lower_quantile, dim=1)
         upper_quantiles = torch.quantile(neighbors, upper_quantile, dim=1)
 
+        # use the whole data range if the quantiles are the same
         upper_quantiles[lower_quantiles == upper_quantiles] = 1000
         lower_quantiles[lower_quantiles == upper_quantiles] = -1000
 
+        # calculate the average of the neighbors that are in the quantile range
         in_quantile_range = (neighbors > lower_quantiles[:, None, :]) & (neighbors < upper_quantiles[:, None, :])
         avg = torch.where(in_quantile_range, neighbors, torch.tensor(0.0, device=neighbors.device))
-
         avg = avg.mean(dim=1)
 
+        # set all values >1 to 1 and all values <-1 to -1
+        # for integrated gradients to work the baseline should be close to 0 
         avg[avg > 1] = 1
         avg[avg < -1] = -1
-
-        print(avg.mean(dim=0))
 
         return avg
 
