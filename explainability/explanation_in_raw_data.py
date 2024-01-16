@@ -12,6 +12,7 @@ from skimage import measure, morphology
 import matplotlib.colors as mcolors
 from skimage import transform
 import torch
+from explainability import torch_geom_explanation
 
 
 
@@ -48,7 +49,7 @@ class RawDataExplainer():
 
 
 
-    def create_explanation_image(self, explanation, hetero_graph,  graph_id, path, faz_node=False, threshold = "adaptive", edge_threshold = "adaptive"):
+    def create_explanation_image(self, explanation, hetero_graph,  graph_id, path, faz_node=False, threshold = "adaptive", edge_threshold = "adaptive", label_names = None, target = None):
         # extract the relevant segmentation, raw image and vvg
         # search the file strings for the graph_id
         self.faz_node = faz_node
@@ -107,17 +108,25 @@ class RawDataExplainer():
             df.index = np.arange(len(df))
 
 
+        # relevant nodes dict
+        het_graph_rel_pos_dict  = torch_geom_explanation.identifiy_relevant_nodes(explanation,hetero_graph, faz_node=self.faz_node)
 
-        relevant_vessels, relevant_regions, relevant_faz = self.identifiy_relevant_nodes(explanation,hetero_graph, threshold = threshold, edge_threshold = edge_threshold, faz_node=faz_node)
+        relevant_vessels = np.where(het_graph_rel_pos_dict["graph_1"])[0]
+        relevant_regions = np.where(het_graph_rel_pos_dict["graph_2"])[0]
 
-        #print("raw_data_regions")
-        #print(relevant_regions)
+        if self.faz_node:
+            relevant_faz = np.where(het_graph_rel_pos_dict["faz"])[0]
+
+
         # for the vessels create a mask that containts the centerline of the relevant vessels
-
+        # also store the positions of the center points on the relevant vessels
         cl_arr = np.zeros_like(raw, dtype=np.float32)
+        cl_center_points = []
         for i, cl in enumerate(vvg_df_edges["pos"]):
             # only add the centerline of the relevant vessels
             if i in relevant_vessels:
+                # extract the centerpoints of the relevant vessels
+                cl_center_points.append(cl[int(len(cl)/2)])
                 for pos in cl:
                     cl_arr[int(pos[0]), int(pos[1])] = 1
                     # also color the neighboring pixels if they exist
@@ -192,25 +201,41 @@ class RawDataExplainer():
 
 
         fig, ax  = plt.subplots(1,2, figsize=(20,10))
-        #ax[0].imshow(raw)
-        #ax[1].imshow(seg)
-        #ax[2].imshow(region_labels)
+        # plotting the raw image 
         ax[0].imshow(raw, alpha = alphas, cmap="gray")
         ax[0].imshow(cl_arr,  alpha=cl_arr, cmap="Greys_r", vmin=0, vmax=1)
 
+        # plotting the segmentation
         ax[1].imshow(regions,  alpha=alphas)
         ax[1].imshow(cl_arr,  alpha=cl_arr, cmap="Greys_r", vmin=0, vmax=1)
 
-        #ax.imshow(alphas, cmap="gray")
 
         # plot the center of the relevant regions
-        #ax[0].scatter(pos[:,1], pos[:,0], c="red", s=15, alpha=0.5)
-        #ax[1].scatter(pos[:,1], pos[:,0], c="red", s=15, alpha=0.5)
+        ax[0].scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
+        ax[1].scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
+
+
+        # plot the center of the relevant vessels
+        ax[0].scatter(np.array(cl_center_points)[:,1], np.array(cl_center_points)[:,0], c="blue", s=15, alpha=1)
+        ax[1].scatter(np.array(cl_center_points)[:,1], np.array(cl_center_points)[:,0], c="blue", s=15, alpha=1)
+
 
         # plot center of faz region if it is relevant
-        #if faz_node and relevant_faz is not None:
-        #    ax[0].scatter(600, 600, c="red", s=15, alpha=0.5)
-        #    ax[1].scatter(600, 600, c="red", s=15, alpha=0.5)
+        if faz_node and relevant_faz is not None:
+            # get the center of the faz region
+            faz_pos = df_faz_node[["centroid-1", "centroid-0"]].values
+            ax[0].scatter(faz_pos[0], faz_pos[1], c="red", s=15, alpha=1, marker="D")
+            ax[1].scatter(faz_pos[0], faz_pos[1], c="red", s=15, alpha=1, marker="D")
+            #ax[0].scatter(600, 600, c="red", s=15, alpha=0.5)
+            #ax[1].scatter(600, 600, c="red", s=15, alpha=0.5)
+
+        if label_names and target is not None:
+            textstr = '\n'.join((
+                "True Label: %s" % (label_names[hetero_graph.y[0].item()], ),
+                "Predicted Label: %s" % (label_names[target], )))
+
+            ax[1].text(0.6, 0.98, textstr, transform=ax[1].transAxes, fontsize=16,
+                verticalalignment='top', bbox=dict(boxstyle='square', facecolor='grey', alpha=1))
 
         if path is not None:
             plt.tight_layout()
@@ -218,66 +243,4 @@ class RawDataExplainer():
             plt.close()
         else:
             return ax
-
-
-
-    def identifiy_relevant_nodes(self, explanation_graph, hetero_graph, threshold="adaptive", edge_threshold="adaptive", faz_node=False):
-
-        graph_1_name = "graph_1"
-        graph_2_name = "graph_2"
-        graph_3_name = "faz"
-
-
-        if threshold == "adaptive":
-
-            total_grad = explanation_graph.node_mask_dict[graph_1_name].abs().sum() + explanation_graph.node_mask_dict[graph_2_name].abs().sum()
-            #avg_grad = total_grad / (explanation_graph.node_mask_dict[graph_1_name].shape[0] + explanation_graph.node_mask_dict[graph_2_name].shape[0])
-
-            if faz_node:
-                total_grad += explanation_graph.node_mask_dict[graph_3_name].abs().sum()
-
-            # find a threshold such that 90% of the total gradient is explained
-
-            node_value = torch.cat((explanation_graph.node_mask_dict[graph_1_name].abs().sum(dim=-1), explanation_graph.node_mask_dict[graph_2_name].abs().sum(dim=-1)))
-            if faz_node:
-                node_value = torch.cat((explanation_graph.node_mask_dict[graph_3_name].abs().sum(dim=-1), node_value))
-
-
-            sorted_node_value = torch.sort(node_value, descending=True)[0]
-            # get rid of the nodes that contribute less than 0.1% to the total gradient
-            sorted_node_value = sorted_node_value[sorted_node_value > 0.0005 * total_grad]
-
-
-            cum_sum = torch.cumsum(sorted_node_value, dim=0)
-            cropped_grad = cum_sum[-1]
-            threshold = sorted_node_value[cum_sum < 0.95 * cropped_grad][-1]
-
-            #threshold = avg_grad #max_val * 0.01
-            print("threshold", threshold)
-
-
-
-        het_graph1_rel_pos = explanation_graph.node_mask_dict[graph_1_name].abs().sum(dim=-1) > threshold
-        het_graph2_rel_pos = explanation_graph.node_mask_dict[graph_2_name].abs().sum(dim=-1) > threshold
-
-        het_graph1_rel_pos = het_graph1_rel_pos.cpu().detach().numpy()
-        het_graph2_rel_pos = het_graph2_rel_pos.cpu().detach().numpy()
-
-        # remove the nodes from the corner
-
-        het_graph1_pos = hetero_graph[graph_1_name].pos.cpu().detach().numpy()
-        het_graph2_pos = hetero_graph[graph_2_name].pos.cpu().detach().numpy()
-
-
-        het_graph1_rel_pos = het_graph1_rel_pos & (het_graph1_pos[:,0] < 1100) & (het_graph1_pos[:,1] > 100) 
-        het_graph2_rel_pos = het_graph2_rel_pos & (het_graph2_pos[:,0] < 1100) & (het_graph2_pos[:,1] > 100)
-
-
-        if faz_node:
-            het_graph3_rel_pos = explanation_graph.node_mask_dict[graph_3_name].abs().sum(dim=-1) > threshold
-            het_graph3_rel_pos = het_graph3_rel_pos.cpu().detach().numpy()
-        else:
-            het_graph3_rel_pos = None
-
-        return np.where(het_graph1_rel_pos)[0], np.where(het_graph2_rel_pos)[0], np.where(het_graph3_rel_pos)[0]
 
