@@ -24,7 +24,8 @@ class HeteroGraphLoaderTorch:
                  line_graph_1 = False, 
                  line_graph_2 = False, 
                  class_dict = None, 
-                 pickle_file = None
+                 pickle_file = None, 
+                 remove_isolated_nodes = True
                  ):
 
         self.graph_path_1 = graph_path_1
@@ -36,6 +37,7 @@ class HeteroGraphLoaderTorch:
 
         self.label_file = label_file
         self.mode = mode
+        self.remove_isolated_nodes = remove_isolated_nodes
 
         if class_dict is not None:
             self.octa_dr_dict = class_dict
@@ -517,7 +519,8 @@ class HeteroGraphLoaderTorch:
                 pass
 
             het_graph = ToUndirected()(het_graph)
-            het_graph = RemoveIsolatedNodes()(het_graph)
+            if self.remove_isolated_nodes:
+                het_graph = RemoveIsolatedNodes()(het_graph)
     
             return het_graph
 
