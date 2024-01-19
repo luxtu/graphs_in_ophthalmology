@@ -228,6 +228,92 @@ class graphClassifierHetero():
 
 
 
+class graphClassifierSimple():
+    def __init__(self, model, loss_func, lr = 0.005, weight_decay = 5e-5, smooth_label_loss = False):
+
+        self.model = model
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        
+        self.model.to(self.device)
+        self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr, weight_decay= weight_decay)
+        #self.optimizer = torch.optim.Adam(self.model.parameters(), lr= lr)
+        #self.optimizer = torch.optim.SGD(self.model.parameters(), lr= lr, momentum=0.9)
+        self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
+        self.lossFunc = loss_func
+        self.smooth_label_loss = smooth_label_loss
+
+    def train(self, loader, data_loss_dict = None):
+        self.model.train()
+        cum_loss = 0
+        raw_out = []
+        y_out = []
+        if data_loss_dict is None:
+            data_loss_dict = {}
+
+        size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
+        for data in loader:
+            #data.to(self.device)
+
+            out =  self.model(data.x, data.edge_index, data.batch)  # Perform a single forward pass. #  pos_dict = pos_dict, 
+            #print(out.shape)
+            #print(data.y.shape)
+
+            # get the number of classes from the output
+            num_classes = out.shape[1]
+            if self.smooth_label_loss:
+                loss = smoothed_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+            else:
+                loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+
+            #loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
+            loss.backward()  # Derive gradients.
+            self.optimizer.step()  # Update parameters based on gradients.
+            self.optimizer.zero_grad()  # Clear gradients.
+            cum_loss += loss.item()
+
+
+            raw_out.append(out.cpu().detach().numpy())
+            y_out.append(data.y.cpu().detach().numpy())
+        
+        #raw_out)
+        pred = np.concatenate(raw_out, axis = 0)
+        y = np.concatenate(y_out, axis = 0)
+        self.scheduler.step()
+        return cum_loss/size_data_set, pred, y
+
+
+    @torch.no_grad()
+    def test(self, loader):
+        self.model.eval()
+        correct = 0
+        size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
+        for data in loader:  # Iterate in batches over the training/test dataset.
+            data.to(self.device)
+            out = self.model(data.x, data.edge_index, data.batch)
+
+            pred = out.argmax(dim=1)  # Use the class with highest probability. 
+            correct += int((pred == data.y).sum())  # Check against ground-truth labels.
+        return correct / size_data_set  # Derive ratio of correct predictions.
+
+    @torch.no_grad()
+    def predict(self, loader):
+
+        raw_out = []
+        y_out = []
+        self.model.eval()
+        for data in loader:  # Iterate in batches over the training/test dataset.
+            data.to(self.device)
+            out = self.model(data.x, data.edge_index, data.batch)
+#
+            raw_out.append(out.cpu().detach().numpy())
+            y_out.append(data.y.cpu().detach().numpy())
+        
+        #raw_out)
+        pred = np.concatenate(raw_out, axis = 0)
+        y = np.concatenate(y_out, axis = 0)
+
+        return pred, y 
+
 
 
 
