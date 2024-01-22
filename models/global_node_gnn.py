@@ -210,27 +210,39 @@ class GNN_global_node(torch.nn.Module):
                 x = self.cat_comps[i](x)
 
             for node_type in self.node_types:
-                x[node_type] = x[node_type] + x_old[node_type] # skip connection
-                #relu after skip connection
-                x[node_type] = self.activation(x[node_type])
+                try:
+                    x[node_type] = x[node_type] + x_old[node_type] # skip connection
+                    #relu after skip connection
+                    x[node_type] = self.activation(x[node_type])
+                except KeyError:
+                    pass
 
         #########################################
         ########################################
-        #pre processing
+        #post processing
         for i in range(len(self.post_processing_lin_layers)):
             for node_type in self.node_types:
-                x[node_type] = self.post_processing_batch_norm[i][node_type](self.post_processing_lin_layers[i][node_type](x[node_type]))
+                try:
+                    x[node_type] = self.post_processing_batch_norm[i][node_type](self.post_processing_lin_layers[i][node_type](x[node_type]))
+                except KeyError:
+                    pass
 
             # relu if not last layer
             if i != len(self.post_processing_lin_layers) - 1:
                 for node_type in self.node_types:
-                    x[node_type] = self.activation(x[node_type])
+                    try:
+                        x[node_type] = self.activation(x[node_type])
+                    except KeyError:
+                        pass
         #########################################
 
         self.final_conv_acts_1 = x["graph_1"]
         self.final_conv_acts_2 = x["graph_2"]
         if self.faz_node:
-            self.final_conv_acts_3 = x["faz"]
+            try:
+                self.final_conv_acts_3 = x["faz"]
+            except KeyError:
+                pass
 
         if grads:
             # register hooks for the gradients
