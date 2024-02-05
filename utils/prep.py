@@ -1,6 +1,13 @@
 import torch
 import numpy as np
 from tqdm import tqdm
+from utils import vvg_tools
+
+def quartiles(regionmask, intensity):
+    return np.percentile(intensity[regionmask], q=(25, 75))
+
+def std_img(regionmask, intensity):
+    return np.std(intensity[regionmask])
 
 
 def get_class_weights(train_labels, verbose = False):
@@ -321,6 +328,12 @@ def hetero_graph_cleanup(dataset, min_area_size = 10):
                 # if the 3rd feature is <10, then remove it
                 idx = torch.where(data.x_dict[key][:,2] <= min_area_size)[0]
                 del_nodes = torch.cat([del_nodes, idx], dim=0)
+
+            # check if the node has a position in the region of the inlay
+            # if the position is in the inlay (>1100 and <100), delete the nodes
+            additioonal_del_nodes = torch.where(data.pos_dict[key][:,0] > 1100 and data.pos_dict[key][:,1] < 100)[0]
+
+            del_nodes = torch.cat([del_nodes, additioonal_del_nodes], dim=0)
 
             # remove duplicates
             del_nodes = torch.unique(del_nodes)
@@ -649,7 +662,7 @@ def add_centerline_statistics(dataset, image_folder, vvg_folder, seg_size):
 
 
 
-        
+
 
 def vvg_to_df(vvg_path):
     # Opening JSON file
@@ -771,9 +784,143 @@ def add_centerline_statistics_multi(dataset, image_folder, vvg_folder, seg_size)
     return updated_dataset
 
 
+def add_vessel_region_statistics_multi(dataset, image_folder, vvg_folder, seg_folder):
+    import os
+    # replace multiprocessing with torch.multiprocessing
+    import torch.multiprocessing as mp
+    torch.multiprocessing.set_sharing_strategy('file_system')
 
 
+    vvg_files = os.listdir(vvg_folder)
+    vvg_files = [file for file in vvg_files if file.endswith(".json") or file.endswith(".json.gz")]
 
+    image_files = os.listdir(image_folder)
+    image_files = [file for file in image_files if file.endswith(".png")]
+
+    seg_files = os.listdir(seg_folder)
+    seg_files = [file for file in seg_files if file.endswith(".png")]
+
+    # match the graphs with corresponding json and image files
+    # iterate over the dataset
+
+    matches = []
+
+    for data in dataset:
+        # get the id of the graph
+        graph_id = data.graph_id
+        # find the corresponding json file
+        json_file = [file for file in vvg_files if graph_id in file][0]
+        # find the corresponding image file
+        image_file = [file for file in image_files if graph_id in file][0]
+        # find the corresponding seg file
+        seg_file = [file for file in seg_files if graph_id in file][0]
+
+        # add folder to the file names
+        json_file = os.path.join(vvg_folder, json_file)
+        image_file = os.path.join(image_folder, image_file)
+        seg_file = os.path.join(seg_folder, seg_file)
+
+        matches.append((data, json_file, image_file, seg_file))
+
+    with mp.Pool(16) as pool:
+        updated_dataset = list(tqdm(pool.imap(process_data_cl_region_props, matches), total=len(dataset)))
+
+    return updated_dataset
+
+
+def process_data_cl_region_props(matched_list):
+
+    from PIL import Image
+    import numpy as np
+    from skimage import measure, morphology, transform
+    from loader import vvg_loader
+    import pandas as pd
+
+    data, json_file, image_file, seg_file = matched_list
+    vvg_df_edges, vvg_df_nodes = vvg_loader.vvg_to_df(json_file)
+    # load the image
+    image = Image.open(image_file)
+    # turn the iamge into a numpy array
+    try:
+        image = np.array(image)[:,:,0]
+    except IndexError:
+        image = np.array(image)
+    # load the seg
+    seg = Image.open(seg_file)
+    # turn the seg into a numpy array
+    seg = np.array(seg)
+    # make seg binary
+    seg = seg > 0
+    # get the ratio between the image size and the seg size
+    image = transform.resize(image, seg.shape, order = 0, preserve_range = True)
+
+    final_seg_label = np.zeros_like(seg, dtype = np.uint16)
+    final_seg_label[seg!=0] = 1
+    cl_vessel = vvg_tools.vvg_df_to_centerline_array_unique_label(vvg_df_edges, vvg_df_nodes, (1216, 1216), vessel_only=True)
+    label_cl = measure.label(cl_vessel)
+    label_cl[label_cl!=0] = label_cl[label_cl!=0] + 1
+    final_seg_label[label_cl!=0] = label_cl[label_cl!=0]
+
+    for i in range (40):
+        label_cl = morphology.dilation(label_cl, morphology.square(3))
+        label_cl = label_cl * seg
+        # get the values of final_seg_label where no semantic segmentation is present
+        final_seg_label[final_seg_label==1] = label_cl[final_seg_label==1]
+        # get indices where label_cl==0 and seg !=0
+        mask = (final_seg_label == 0) & (seg != 0)
+        final_seg_label[mask] = 1
+
+    # pixels that are still 1 are turned into 0
+    final_seg_label[final_seg_label==1] = 0
+    # labels for the rest are corrected by -1
+    final_seg_label[final_seg_label!=0] = final_seg_label[final_seg_label!=0] - 1
+   
+    # extract the intensity statistics for the different regions
+    props = measure.regionprops_table(final_seg_label, intensity_image=image, properties = ("intensity_mean", "intensity_max", "intensity_min" ), extra_properties= (std_img, )) # remove quartiles, shouldnt be too many properties
+    props_df = pd.DataFrame(props) 
+    # match the regions with the nodes
+    # iterate over the edges
+    added_props = []
+    for i in range(len(vvg_df_edges)):
+        # get the positions of the centerline
+        positions = vvg_df_edges.iloc[i]["pos"]
+        # check if positions is an empty list
+        if len(positions) == 0:
+            # as many nans as props_df.columns
+            added_props.append(np.array([np.nan, np.nan, np.nan, np.nan])) # two less np.nan without quartiles
+            continue
+        # get the most frequent label in the region
+        frequent_label = {}
+        for pos in positions:
+            label = final_seg_label[int(pos[0]), int(pos[1])]
+            if label in frequent_label:
+                frequent_label[label] += 1
+            else:
+                frequent_label[label] = 1
+        # get the most frequent label, by the number of occurences
+        max_label = max(frequent_label, key=frequent_label.get)
+
+        # if the max label is 0 take the second most frequent label
+        if max_label == 0:
+            try:
+                frequent_label.pop(max_label)
+                max_label = max(frequent_label, key=frequent_label.get)
+            except ValueError:
+                max_label = 0
+
+        # get the properties of the region
+        if max_label != 0:
+            # get the column where the label is the max label
+            prop = props_df.iloc[max_label-1]
+            # don't take the label column
+            added_props.append(np.array(prop)) # not need : [1:] if the label is not included
+        else:
+            # give the properties nan values
+            added_props.append(np.array([np.nan, np.nan, np.nan, np.nan])) # two less np.nan without quartiles
+
+    data["graph_1"].x = torch.cat([data["graph_1"].x, torch.tensor(np.array(added_props), dtype = data["graph_1"].x.dtype)], dim=1)
+    
+    return data
 
 def process_data_cl(matched_list):
     # unpack the tuple
