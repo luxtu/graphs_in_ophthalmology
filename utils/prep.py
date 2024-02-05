@@ -303,7 +303,7 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False):
 
 
 
-def hetero_graph_cleanup(dataset):
+def hetero_graph_cleanup(dataset, min_area_size = 10):
 
     relevant_nodes = ["graph_1", "graph_2"]
     for data in tqdm(dataset):
@@ -319,7 +319,7 @@ def hetero_graph_cleanup(dataset):
                 del_nodes = torch.cat([del_nodes, idx], dim=0)
             elif key == "graph_2":
                 # if the 3rd feature is <10, then remove it
-                idx = torch.where(data.x_dict[key][:,2] <= 10)[0]
+                idx = torch.where(data.x_dict[key][:,2] <= min_area_size)[0]
                 del_nodes = torch.cat([del_nodes, idx], dim=0)
 
             # remove duplicates
