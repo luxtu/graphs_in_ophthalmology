@@ -10,7 +10,11 @@ import re
 from utils import vvg_tools
 from loader import vvg_loader
 
+def quartiles(regionmask, intensity):
+    return np.percentile(intensity[regionmask], q=(25, 75))
 
+def std_img(regionmask, intensity):
+    return np.std(intensity[regionmask])
 
 class HeterographFromVVGGenerator:
 
@@ -47,7 +51,7 @@ class HeterographFromVVGGenerator:
         else:
             return False
 
-    def find_matching_files(self, seg_files, vvg_files, image_files = None):
+    def find_matching_files(self, seg_files, vvg_files, image_files = None, no_edges = False):
         pattern = r'\d+'
 
         #extract the indices once from all the files
@@ -105,7 +109,10 @@ class HeterographFromVVGGenerator:
                             print(idx_dict)
                             # only regenerate the graph if it does not exist yet or if the force flag is set
                             if not self.check_existing_heterograph(idx_dict) or self.force:
-                                self.generate_region_graph(seg_file, vvg_file, idx_dict, image_file)
+                                if no_edges:
+                                    self.generate_region_graphs_no_edges(seg_file, vvg_file, idx_dict, image_file)
+                                else:
+                                    self.generate_region_graph(seg_file, vvg_file, idx_dict, image_file)
 
                             # break of inner loop
                             found_match = True
@@ -118,13 +125,16 @@ class HeterographFromVVGGenerator:
                     print(idx_dict)
                     # only regenerate the graph if it does not exist yet or if the force flag is set
                     if not self.check_existing_heterograph(idx_dict) or self.force:
-                        self.generate_region_graph(seg_file, vvg_file, idx_dict)
+                        if no_edges:
+                            self.generate_region_graphs_no_edges(seg_file, vvg_file, idx_dict)
+                        else:
+                            self.generate_region_graph(seg_file, vvg_file, idx_dict)
 
                 # break of outer loop
                 if found_match:
                     break
 
-    def save_region_graphs(self):
+    def save_region_graphs(self, no_edges = False):
         
         seg_files = os.listdir(self.seg_path)
         vvg_files = os.listdir(self.vvg_path)
@@ -137,12 +147,107 @@ class HeterographFromVVGGenerator:
         if self.image_path is not None:
             image_files = os.listdir(self.image_path)
             image_files = [file for file in image_files if file.endswith(".png")]
-            self.find_matching_files(seg_files, vvg_files, image_files)
+            self.find_matching_files(seg_files, vvg_files, image_files, no_edges=no_edges)
 
         else:
-            self.find_matching_files(seg_files, vvg_files)
+            self.find_matching_files(seg_files, vvg_files, no_edges=no_edges)
 
         # find matching files in both folders, not all the files will be matched
+            
+
+
+    def generate_region_graphs_no_edges(self, seg_file, vvg_file, idx_dict, image_file = None):
+        seg = Image.open(os.path.join(self.seg_path, seg_file))
+        seg = np.array(seg)
+        seg = seg.astype(np.uint8)
+
+        if image_file is not None:
+            image = Image.open(os.path.join(self.image_path, image_file))
+            try:
+                image = np.array(image)[:,:,0]
+            except IndexError:
+                image = np.array(image)
+            image = transform.resize(image, seg.shape, order = 0, preserve_range = True)
+
+            #image = image.astype(np.uint8)
+        # background is 1
+        ## region properties don't make sense with extremely small regions, also they probably come from failed segmentation
+        region_labels = measure.label(morphology.remove_small_holes(seg, area_threshold=5, connectivity=1).astype("uint8"), background=1)
+
+        if self.debug:
+            fig, ax = plt.subplots(figsize=(10, 10))
+            ax.imshow(region_labels)
+        
+        if self.image_path is not None:
+            props = measure.regionprops_table(region_labels,intensity_image=image, 
+                                              properties=('centroid',
+                                                 'area',
+                                                 'perimeter',
+                                                 'eccentricity',
+                                                 'equivalent_diameter',
+                                                 'orientation',
+                                                 'solidity',
+                                                 'feret_diameter_max',
+                                                 'extent',
+                                                 'axis_major_length',
+                                                 'axis_minor_length',
+                                                 "intensity_max",
+                                                 "intensity_mean",
+                                                 "intensity_min",
+                                                 "centroid_weighted"), extra_properties= (quartiles, std_img))
+            
+        else:
+
+            props = measure.regionprops_table(region_labels, 
+                                              properties=('centroid',
+                                                 'area',
+                                                 'perimeter',
+                                                 'eccentricity',
+                                                 'equivalent_diameter',
+                                                 'orientation',
+                                                 'solidity',
+                                                 'feret_diameter_max',
+                                                 'extent',
+                                                 'axis_major_length',
+                                                 'axis_minor_length'))
+        df = pd.DataFrame(props)  
+
+
+        if self.faz_node:
+            # faz_region is the region with label at 600,600
+            faz_region_label = region_labels[600,600]
+            idx_y = 600
+            while faz_region_label == 0:
+                idx_y += 1
+                faz_region_label = region_labels[idx_y,600]
+
+            # find region in props with largest area
+            #pos = df["area"].idxmax()
+            #print(pos)
+#
+            #print(faz_region_label)
+            # create a dataframe with only the faz region
+            df_faz_node = df.iloc[faz_region_label-1]
+
+            # create a dataframe with all the other regions
+            df = df.drop(faz_region_label-1)
+
+            ## adjust labels of the regions
+            df.index = np.arange(len(df))
+
+
+
+        if self.faz_node:
+            region_node_file = os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes_faz_node" + ".csv")
+            faz_node_file = os.path.join(self.faz_node_save_path, str(idx_dict) + "_faz_node_faz_node"+".csv")
+            df_faz_node.to_csv(faz_node_file, sep = ";")
+        
+        else:
+            region_node_file = os.path.join(self.void_graph_save_path, str(idx_dict)+ "_region_nodes" + ".csv")
+
+
+        df.to_csv(region_node_file, sep = ";")
+
 
 
     def generate_region_graph(self, seg_file, vvg_file, idx_dict, image_file = None):
