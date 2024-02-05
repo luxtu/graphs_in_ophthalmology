@@ -25,18 +25,21 @@ class GNN_global_node(torch.nn.Module):
                  activation = F.relu,
                  start_rep = False,
                  aggr_faz = False,
+                 faz_conns = True
                  ):
         super().__init__()
         torch.manual_seed(1234567)
 
+        self.faz_conns = faz_conns
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
         self.num_layers = num_layers
         self.dropout = dropout
         self.aggregation_mode = aggregation_mode
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.unused_faz = not aggr_faz and not start_rep and not hetero_conns
         self.faz_node = faz_node
-        if self.faz_node:
+        if self.faz_node: #and not self.unused_faz:
             self.node_types = node_types + ["faz"] #+ ["global"]
         else:
             self.node_types = node_types
@@ -136,9 +139,9 @@ class GNN_global_node(torch.nn.Module):
         #self.han_convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             if self.faz_node:
-                conv = self.conv_123(self.hidden_channels, self.conv_aggr, self.hetero_conns, self.homogeneous_conv, self.heterogeneous_conv)
+                conv = self.conv_123(self.hidden_channels, self.conv_aggr, self.homogeneous_conv, self.heterogeneous_conv)
             else:
-                conv = self.conv_12(self.hidden_channels, self.conv_aggr, self.hetero_conns, self.homogeneous_conv, self.heterogeneous_conv)
+                conv = self.conv_12(self.hidden_channels, self.conv_aggr, self.homogeneous_conv, self.heterogeneous_conv)
 
             self.convs.append(conv)
             if self.conv_aggr == "cat":
@@ -183,7 +186,7 @@ class GNN_global_node(torch.nn.Module):
                     for j in range(len(self.aggregation_mode)):
                         # check if the aggregation mode is global_add_pool
                         if self.aggregation_mode[j] == global_add_pool:
-                            start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key])/1000) 
+                            start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))  #/1000
                         else:
                             start_representations.append(self.aggregation_mode[j](x_dict[key], batch_dict[key]))
                 else:
@@ -270,7 +273,7 @@ class GNN_global_node(torch.nn.Module):
                 for j in range(len(self.aggregation_mode)):
                     # check if the aggregation mode is global_add_pool
                     if self.aggregation_mode[j] == global_add_pool:
-                        type_specific_representations.append(self.aggregation_mode[j](x[key], batch_dict[key])/1000) 
+                        type_specific_representations.append(self.aggregation_mode[j](x[key], batch_dict[key]))  # /1000 
                     else:
                         type_specific_representations.append(self.aggregation_mode[j](x[key], batch_dict[key]))
             else:
@@ -378,7 +381,7 @@ class GNN_global_node(torch.nn.Module):
                         # check if the aggregation mode is global_add_pool
                         if self.aggregation_mode[j] == global_add_pool:
                             #pool the nodes from the same patch together
-                            aggr_list_rep.append(self.aggregation_mode[j](x_dict[key][node_patch_labels == patch], batch_dict[key][node_patch_labels == patch])/1000)
+                            aggr_list_rep.append(self.aggregation_mode[j](x_dict[key][node_patch_labels == patch], batch_dict[key][node_patch_labels == patch])) # /1000
                         else:
                             aggr_list_rep.append(self.aggregation_mode[j](x_dict[key][node_patch_labels == patch], batch_dict[key][node_patch_labels == patch]))
                         # concat the pooled representations from the different aggregation modes, axis is the feature dimension
@@ -553,8 +556,8 @@ class GNN_global_node(torch.nn.Module):
 
 
 
-    def conv_12(self, hidden_channels, conv_aggr, hetero_conns, homogeneous_conv, heterogeneous_conv):
-        if hetero_conns:
+    def conv_12(self, hidden_channels, conv_aggr, homogeneous_conv, heterogeneous_conv):
+        if self.hetero_conns:
             if self.global_node:
                 conv = HeteroConv({
                     ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels), # , aggr = ["mean", "std", "max"],
@@ -587,8 +590,8 @@ class GNN_global_node(torch.nn.Module):
         return conv
 
 
-    def conv_123(self, hidden_channels, conv_aggr, hetero_conns, homogeneous_conv, heterogeneous_conv):
-        if hetero_conns:
+    def conv_123(self, hidden_channels, conv_aggr, homogeneous_conv, heterogeneous_conv):
+        if self.hetero_conns and self.faz_conns:
             conv = HeteroConv({
                 ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
                 ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
@@ -601,6 +604,14 @@ class GNN_global_node(torch.nn.Module):
                 ('graph_2', 'rev_to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
 
             }, aggr=conv_aggr)
+        elif self.hetero_conns and not self.faz_conns:
+            conv = HeteroConv({
+                ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+            }, aggr=conv_aggr)
+
         else:
             conv = HeteroConv({
                 ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
