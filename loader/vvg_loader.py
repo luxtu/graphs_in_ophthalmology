@@ -66,36 +66,37 @@ def vvg_to_df(vvg_path):
         volume = []
         nearOtherEdge = []
 
-
-        try:
-            i["skeletonVoxels"]
-        except KeyError:
-            #print("fail vessel")
-            continue
-
         id_col.append(i["id"])
         node1_col.append(i["node1"])
         node2_col.append(i["node2"])
+        try:
+            i["skeletonVoxels"]
+            for j in i["skeletonVoxels"]:
+                positions.append(np.array(j["pos"]))
+                minDistToSurface.append(j["minDistToSurface"])
+                maxDistToSurface.append(j["maxDistToSurface"])
+                avgDistToSurface.append(j["avgDistToSurface"])
+                numSurfaceVoxels.append(j["numSurfaceVoxels"])
+                volume.append(j["volume"])
+                nearOtherEdge.append(j["nearOtherEdge"] )
 
-
-        for j in i["skeletonVoxels"]:
-            positions.append(np.array(j["pos"]))
-            minDistToSurface.append(j["minDistToSurface"])
-            maxDistToSurface.append(j["maxDistToSurface"])
-            avgDistToSurface.append(j["avgDistToSurface"])
-            numSurfaceVoxels.append(j["numSurfaceVoxels"])
-            volume.append(j["volume"])
-            nearOtherEdge.append(j["nearOtherEdge"] )
-
-        pos_col.append(positions)
-        minDistToSurface_col.append(minDistToSurface)
-        maxDistToSurface_col.append(maxDistToSurface)
-        avgDistToSurface_col.append(avgDistToSurface)
-        numSurfaceVoxels_col.append(numSurfaceVoxels)
-        volume_col.append(volume)
-        nearOtherEdge_col.append(nearOtherEdge)
-
-    
+            pos_col.append(positions)
+            minDistToSurface_col.append(minDistToSurface)
+            maxDistToSurface_col.append(maxDistToSurface)
+            avgDistToSurface_col.append(avgDistToSurface)
+            numSurfaceVoxels_col.append(numSurfaceVoxels)
+            volume_col.append(volume)
+            nearOtherEdge_col.append(nearOtherEdge)
+        except KeyError:
+            #print("fail vessel")
+            # add empty lists
+            pos_col.append([])
+            minDistToSurface_col.append([])
+            maxDistToSurface_col.append([])
+            avgDistToSurface_col.append([])
+            numSurfaceVoxels_col.append([])
+            volume_col.append([])
+            nearOtherEdge_col.append([])
 
 
     d = {'id': id_col,'pos' : pos_col, "node1" : node1_col, "node2" : node2_col, "minDistToSurface": minDistToSurface_col,"maxDistToSurface":maxDistToSurface_col, "avgDistToSurface":avgDistToSurface_col, "numSurfaceVoxels":numSurfaceVoxels_col, "volume":volume_col,"nearOtherEdge":nearOtherEdge_col }
