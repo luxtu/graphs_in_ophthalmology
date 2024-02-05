@@ -19,8 +19,8 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
 # Define sweep config
 sweep_configuration = {
-    "method": "bayes",
-    "name": "region graph sweep",
+    "method": "random",
+    "name": "vessel graph sweep split 1, random search",
     "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
         "batch_size": {"values": [8, 16, 32, 64]},
@@ -35,7 +35,7 @@ sweep_configuration = {
         "post_layers": {"values": [1,2,4]},
         "final_layers": {"values": [1,2,4]},
         "batch_norm": {"values": [True, False]},
-        "class_weights": {"values": ["balanced", "weak_balanced"]}, # "balanced", #  # "unbalanced", 
+        "class_weights": {"values": ["balanced"]}, # "balanced", #  # "unbalanced",  , "weak_balanced"
         "dataset": {"values": ["DCP"]}, #, "DCP"
         "homogeneous_conv": {"values": ["sage"]}, # removed "gat", "graph", "gcn"
         "activation": {"values": ["relu", "leaky", "elu"]},
@@ -170,9 +170,9 @@ activation_dict = {"relu":torch.nn.functional.relu, "leaky" : torch.nn.functiona
 
 
 # create homogeneous graphs out of the heterogenous graphs
-train_dataset = to_homogeneous_graph.to_void_graph(train_dataset)
-val_dataset = to_homogeneous_graph.to_void_graph(val_dataset)
-test_dataset = to_homogeneous_graph.to_void_graph(test_dataset)
+train_dataset = to_homogeneous_graph.to_vessel_graph(train_dataset)
+val_dataset = to_homogeneous_graph.to_vessel_graph(val_dataset)
+test_dataset = to_homogeneous_graph.to_vessel_graph(test_dataset)
 
 for data in train_dataset:
     data.to(device)
