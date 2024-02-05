@@ -21,38 +21,38 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 # Define sweep config
 sweep_configuration = {
     "method": "random",
-    "name": "3 Class Bayes, Split 3, Optional Loss Eliminated Features No FAZ Node No Attention _ Repeat",
+    "name": "Keep Has Node at Sample Border, Random Search 3 Class, CL Stats, Region Intensity Deviations, Split 4, Eliminated Features, Smooth Label Loss(Really), Graph Cleaning, Faz Node, Isolated Nodes Not Removed", #  CL Stats, Region Intensity Deviations,
     "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
-        "batch_size": {"values": [8, 16, 32, 64]},
+        "batch_size": {"values": [16, 32, 64]},
         "epochs": {"values": [100]},
-        "lr": {"max": 0.05, "min": 0.005}, # learning rate to high does not work
+        "lr": {"max": 0.01, "min": 0.001}, # learning rate to high does not work
         "weight_decay": {"max": 0.01, "min": 0.00001},
         "hidden_channels": {"values": [16, 32, 64]}, #[64, 128]
         "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
         "num_layers": {"values": [1,2,5]},
-        "aggregation_mode": {"values": ["mean", "add", "max", "add_max", "max_mean", "add_mean"]},#, "global_mean_pool",  "global_add_pool" # add pool does not work
+        "aggregation_mode": {"values": ["mean", "add_max", "max_mean","add_mean"]},# removed, "add", "max", "add_mean" #  "add"           "mean", "add_max", "max_mean",
         "pre_layers": {"values": [1,2,4]},
         "post_layers": {"values": [1,2,4]},
         "final_layers": {"values": [1,2,4]},
         "batch_norm": {"values": [True, False]},
         "hetero_conns": {"values": [True, False]},
+        "faz_conns": {"values": [True]}, #, False
         "conv_aggr": {"values": ["cat", "sum", "mean"]}, # cat, sum, mean
-        "class_weights": {"values": ["balanced", "weak_balanced"]}, # "balanced", #  # "unbalanced", 
+        "class_weights": {"values": ["balanced"]}, # "balanced", #  # "unbalanced", # , "weak_balanced" 
         "dataset": {"values": ["DCP"]}, #, "DCP"
-        "regression": {"values": [False]},
-        "homogeneous_conv": {"values": ["sage", "graph", "gcn"]}, # "gat", 
+        "homogeneous_conv": {"values": ["sage"]}, # removed "gat", "graph", "gcn"
         "heterogeneous_conv": {"values": ["gat", "sage", "graph"]},
         "activation": {"values": ["relu", "leaky", "elu"]},
         "faz_node": {"values": [True]},
-        "split": {"values": [3]},
+        "split": {"values": [4]},
         "start_rep": {"values": [True, False]},
         "aggr_faz": {"values": [True, False]},
         "smooth_label_loss": {"values": [True, False]},
     },
 }
 
-sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class")
+sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class cleaned graphs")
 # loading data
 
 data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
@@ -73,8 +73,8 @@ mode_cv = "cv"
 mode_final_test = "final_test"
 
 if not faz_node_bool:
-    void_graph_path = f"..data/{data_type}_void_graph"
-    hetero_edges_path = f"..data/{data_type}_heter_edges"
+    void_graph_path = f"../data/{data_type}_void_graph"
+    hetero_edges_path = f"../data/{data_type}_heter_edges"
 
     cv_pickle = f"../data/{data_type}_{mode_cv}_dataset.pkl"
     cv_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
@@ -99,13 +99,13 @@ if not faz_node_bool:
                                                             )
 
 else:
-    void_graph_path = f"..data/{data_type}_void_graph_faz_node"
-    hetero_edges_path = f"..data/{data_type}_heter_edges_faz_node"
+    void_graph_path = f"../data/{data_type}_void_graph_faz_node_more_features" # _more_features
+    hetero_edges_path = f"../data/{data_type}_hetero_edges_faz_node"
     faz_node_path = f"../data/{data_type}_faz_nodes"
     faz_region_edge_path = f"../data/{data_type}_faz_region_edges"
     faz_vessel_edge_path = f"../data/{data_type}_faz_vessel_edges"
 
-    cv_pickle = f"../data/{data_type}_{mode_cv}_dataset_faz.pkl"
+    cv_pickle = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features.pkl"  # _isol_not_removed    _more_features
     cv_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
                                                             graph_path_2=void_graph_path,
                                                             graph_path_3=faz_node_path,
@@ -116,10 +116,11 @@ else:
                                                             label_file = label_file, 
                                                             line_graph_1 =True, 
                                                             class_dict = octa_dr_dict,
-                                                            pickle_file = cv_pickle #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
+                                                            pickle_file = cv_pickle, #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
+                                                            remove_isolated_nodes=False
                                                             )
 
-    final_test_pickle = f"../data/{data_type}_{mode_final_test}_dataset_faz.pkl"
+    final_test_pickle = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features.pkl"   # _isol_not_removed     _more_features
     final_test_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
                                                             graph_path_2=void_graph_path,
                                                             graph_path_3=faz_node_path,
@@ -130,15 +131,35 @@ else:
                                                             label_file = label_file, 
                                                             line_graph_1 =True, 
                                                             class_dict = octa_dr_dict,
-                                                            pickle_file = final_test_pickle #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
+                                                            pickle_file = final_test_pickle, #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
+                                                            remove_isolated_nodes=False
                                                             )
 
+print(f"CV dataset length: {len(cv_dataset)}")
+print(f"Final test dataset length: {len(final_test_dataset)}")
 
 #octa_dr_dict = {"Healthy": 0, "DM": 0, "PDR": 3, "Early NPDR": 1, "Late NPDR": 2}
 #label_names = ["Healthy/DM", "Early NPDR", "Late NPDR", "PDR"]
 # update the label dict
 #final_test_dataset.update_class(octa_dr_dict)
 #cv_dataset.update_class(octa_dr_dict)
+image_path = f"../data/{data_type}_images"
+json_path = f"../data/{data_type}_json"
+seg_size = 1216
+
+cv_dataset_cl = prep.add_centerline_statistics_multi(cv_dataset, image_path, json_path, seg_size)
+final_test_dataset_cl = prep.add_centerline_statistics_multi(final_test_dataset, image_path, json_path, seg_size)
+
+# clean the data
+cv_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(cv_dataset_cl)
+final_test_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(final_test_dataset_cl)
+
+cv_dataset_dict = dict(zip([graph.graph_id for graph in cv_dataset.hetero_graph_list], cv_dataset.hetero_graph_list))
+final_test_dataset_dict = dict(zip([graph.graph_id for graph in final_test_dataset.hetero_graph_list], final_test_dataset.hetero_graph_list))
+
+# set the dictionaries
+cv_dataset.hetero_graphs = cv_dataset_dict
+final_test_dataset.hetero_graphs = final_test_dataset_dict
 
 
 split = sweep_configuration["parameters"]["split"]["values"][0]
@@ -156,11 +177,14 @@ with open("feature_name_dict.json", "r") as file:
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
-eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "maxRadiusStd"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
                       "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]}
 
+#eliminate_features = {"graph_1":["maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd", "minRadiusAvg",  "avgRadiusStd", "roundnessStd", "roundnessAvg", "curveness"], 
+#                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "intensity_max", "centroid-0", "centroid-1", "solidity", "extent", "degree"]}
+
 if faz_node_bool:
-    eliminate_features["faz"] = ["centroid_weighted-0", "centroid_weighted-1","feret_diameter_max", "orientation"]
+    eliminate_features["faz"] = ["centroid_weighted-0", "centroid_weighted-1","feret_diameter_max", "orientation"] # , "centroid-0", "centroid-1", "solidity", "extent"
 
 
 # get positions of features to eliminate and remove them from the feature label dict and the graphs
@@ -174,6 +198,21 @@ for key in eliminate_features.keys():
             data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
         for data in test_dataset:
             data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+
+
+# delete all features but the last one
+#for key in eliminate_features.keys():
+#    for data in train_dataset:
+#        data[key].x = data[key].x[:, -1].unsqueeze(1)
+#    for data in val_dataset:
+#        data[key].x = data[key].x[:, -1].unsqueeze(1)
+#    for data in test_dataset:
+#        data[key].x = data[key].x[:, -1].unsqueeze(1)
+
+    
+            
+
+
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -201,17 +240,6 @@ test_dataset.to(device)
 def main():
     #torch.autograd.set_detect_anomaly(True)
     run = wandb.init()
-    api = wandb.Api()
-    # ptint the run id
-    print(f"Run ID: {run.id}")
-    sweep = api.sweep("luxtu/gnn_cv_3_class/" + sweep_id)
-    try: 
-        th_swp = sweep.best_run(order='best_mean_auc').summary_metrics['best_mean_auc']
-    except KeyError:
-        th_swp = 0
-    except AttributeError:
-        th_swp = 0
-
 
     model = global_node_gnn.GNN_global_node(hidden_channels= wandb.config.hidden_channels,
                                                         out_channels= num_classes,
@@ -224,13 +252,13 @@ def main():
                                                         batch_norm = wandb.config.batch_norm,
                                                         conv_aggr = wandb.config.conv_aggr,
                                                         hetero_conns = wandb.config.hetero_conns,
-                                                        #meta_data = train_dataset[0].metadata())
                                                         homogeneous_conv= homogeneous_conv_dict[wandb.config.homogeneous_conv],
                                                         heterogeneous_conv= heterogeneous_conv_dict[wandb.config.heterogeneous_conv],
                                                         activation= activation_dict[wandb.config.activation],
                                                         faz_node = wandb.config.faz_node,
                                                         start_rep = wandb.config.start_rep,
                                                         aggr_faz = wandb.config.aggr_faz,
+                                                        faz_conns= wandb.config.faz_conns
                                                         )
 
     # create data loaders for training and test set
@@ -248,23 +276,19 @@ def main():
     loss_dict = {"balanced": balanced_loss, "unbalanced": unbalanced_loss, "weak_balanced": weak_balanced_loss}
 
 
-    if wandb.config.regression:
-        reg_loss = torch.nn.SmoothL1Loss()
-        classifier = graph_classifier.graphClassifierHetero(model,reg_loss , lr = wandb.config.lr, weight_decay =wandb.config.weight_decay, regression=wandb.config.regression)
-    else:
-        classifier = graph_classifier.graphClassifierHetero(model, loss_dict[wandb.config.class_weights], lr = wandb.config.lr, weight_decay =wandb.config.weight_decay, regression=wandb.config.regression) 
+    classifier = graph_classifier.graphClassifierHetero(model, loss_dict[wandb.config.class_weights], lr = wandb.config.lr, weight_decay =wandb.config.weight_decay, smooth_label_loss = wandb.config.smooth_label_loss) 
 
     best_val_bal_acc = 0
     best_mean_auc = 0
     best_pred = None
     for epoch in range(1, wandb.config.epochs + 1):
-        loss, y_prob_train, y_true_train, data_loss_dict  = classifier.train(train_loader)
+        loss, y_prob_train, y_true_train, _  = classifier.train(train_loader)
         y_prob_val, y_true_val = classifier.predict(val_loader)
+        y_prob_test, y_true_test = classifier.predict(test_loader)
 
-        if wandb.config.regression:
-            y_pred_val = y_prob_val.squeeze() 
-        else:
-            y_pred_val = y_prob_val.argmax(axis=1)
+
+        y_pred_val = y_prob_val.argmax(axis=1)
+        y_pred_test = y_prob_test.argmax(axis=1)
 
         
         train_acc = accuracy_score(y_true_train, y_prob_train.argmax(axis=1))
@@ -272,35 +296,41 @@ def main():
 
         val_acc = accuracy_score(y_true_val, y_pred_val)
         val_bal_acc = balanced_accuracy_score(y_true_val, y_pred_val)
+
+        test_acc = accuracy_score(y_true_test, y_pred_test)
+        test_bal_acc = balanced_accuracy_score(y_true_test, y_pred_test)
+
         res_dict =  {"loss": loss, "val_acc": val_acc, "val_bal_acc": val_bal_acc, "train_acc": train_acc, "train_bal_acc": train_bal_acc}
+        res_dict["test_acc"] = test_acc
+        res_dict["test_bal_acc"] = test_bal_acc
 
 
-        if not wandb.config.regression:
-            y_p_softmax = torch.nn.functional.softmax(torch.tensor(y_prob_val), dim = 1).detach().numpy()
-            if num_classes == 2:
-                mean_auc = roc_auc_score(
-                    y_true=y_true_val,
-                    y_score = y_p_softmax[:,1],
-                    multi_class="ovr",
-                    average="macro",
-                )
-            else:
-                mean_auc = roc_auc_score(
-                    y_true=y_true_val,
-                    y_score = y_p_softmax,
-                    multi_class="ovr",
-                    average="macro",
-                )
-                label_binarizer = LabelBinarizer().fit(y_true_val)
-                y_onehot_val = label_binarizer.transform(y_true_val)
-                # get auc for each class
-                fpr = dict()
-                tpr = dict()
-                roc_auc = dict()
-                for i in range(num_classes):
-                    fpr[i], tpr[i], _ = roc_curve(y_onehot_val[:, i], y_p_softmax[:, i])
-                    roc_auc[i] = auc(fpr[i], tpr[i])
-                    res_dict[f"roc_auc_{label_names[i]}"] = roc_auc[i]
+
+        y_p_softmax = torch.nn.functional.softmax(torch.tensor(y_prob_val), dim = 1).detach().numpy()
+        if num_classes == 2:
+            mean_auc = roc_auc_score(
+                y_true=y_true_val,
+                y_score = y_p_softmax[:,1],
+                multi_class="ovr",
+                average="macro",
+            )
+        else:
+            mean_auc = roc_auc_score(
+                y_true=y_true_val,
+                y_score = y_p_softmax,
+                multi_class="ovr",
+                average="macro",
+            )
+            label_binarizer = LabelBinarizer().fit(y_true_val)
+            y_onehot_val = label_binarizer.transform(y_true_val)
+            # get auc for each class
+            fpr = dict()
+            tpr = dict()
+            roc_auc = dict()
+            for i in range(num_classes):
+                fpr[i], tpr[i], _ = roc_curve(y_onehot_val[:, i], y_p_softmax[:, i])
+                roc_auc[i] = auc(fpr[i], tpr[i])
+                res_dict[f"roc_auc_{label_names[i]}"] = roc_auc[i]
 
 
             if mean_auc > best_mean_auc or (mean_auc == best_mean_auc and val_bal_acc > best_val_bal_acc):
@@ -314,6 +344,7 @@ def main():
             res_dict["best_mean_auc"] = best_mean_auc
 
 
+
         if val_bal_acc > best_val_bal_acc:
             best_val_bal_acc = val_bal_acc
             if best_val_bal_acc > 0.65:
@@ -322,14 +353,11 @@ def main():
 
                 # run inference on test set
                 y_prob_test, y_true_test = classifier.predict(test_loader)
-                if wandb.config.regression:
-                    y_pred_test = y_prob_test.squeeze() 
-                else:
-                    y_pred_test = y_prob_test.argmax(axis=1)
-                test_acc = accuracy_score(y_true_test, y_pred_test)
-                test_bal_acc = balanced_accuracy_score(y_true_test, y_pred_test)
-                res_dict["test_acc"] = test_acc
-                res_dict["test_bal_acc"] = test_bal_acc
+                y_pred_test = y_prob_test.argmax(axis=1)
+                #test_acc = accuracy_score(y_true_test, y_pred_test)
+                #test_bal_acc = balanced_accuracy_score(y_true_test, y_pred_test)
+                #res_dict["test_acc"] = test_acc
+                #res_dict["test_bal_acc"] = test_bal_acc
 
                 print("#"*20)
                 print(f"Test accuracy: {test_acc}")
@@ -345,8 +373,8 @@ def main():
 
         wandb.log(res_dict)
 
-    if not wandb.config.regression:
-        wandb.log({"roc": wandb.plot.roc_curve(y_true_val, best_pred, labels = label_names)})
+
+    wandb.log({"roc": wandb.plot.roc_curve(y_true_val, best_pred, labels = label_names)})
 
 
 wandb.agent(sweep_id, function=main, count=200)
