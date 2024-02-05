@@ -120,14 +120,14 @@ class HeteroGraphPlotter2D():
             fig.set_figwidth(side_l)
             fig.set_figheight(side_l)
 
-            plt.ylim(0,1200)
-            plt.xlim(0,1200)
+            plt.ylim(1216,0)
+            plt.xlim(0,1216)
 
         else:
-            ax.set_ylim(0,1200)
-            ax.set_xlim(0,1200)
-            ax.set_yticklabels([])
-            ax.set_xticklabels([])
+            ax.set_ylim(1216,0)
+            ax.set_xlim(0,1216)
+            #ax.set_yticklabels([])
+            #ax.set_xticklabels([])
 
         het_graph1_pos = het_graph[self.graph_1_name].pos.cpu().detach().numpy()
         het_graph2_pos = het_graph[self.graph_2_name].pos.cpu().detach().numpy()
@@ -165,14 +165,15 @@ class HeteroGraphPlotter2D():
                 lower_range = self.lower_range
 
 
-            power_norm = PowerNorm(gamma=0.5, vmin=lower_range, vmax=upper_range)
+            #power_norm = PowerNorm(gamma=0.5, vmin=lower_range, vmax=upper_range)
 
-            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Oranges", zorder = 2, alpha= 0.8, norm = power_norm) # vmin = lower_range, vmax = upper_range ) #,alpha = sft_max1
-            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= 0.8, marker = "s" , norm = power_norm) # vmin = lower_range, vmax = upper_range) #alpha = sft_max2 
+            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Blues", zorder = 2, alpha= 0.8, vmin = lower_range, vmax = upper_range) # norm = power_norm, vmin = lower_range, vmax = upper_range ) #,alpha = sft_max1
+            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= 0.8, marker = "s" , vmin = lower_range, vmax = upper_range) # vmin = lower_range, vmax = upper_range) #alpha = sft_max2 
 
             #[:,self.cls]
             #[:,self.cls]
 
+            plt.colorbar(sc1)
             plt.colorbar(sc2)
         else:
             ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8)
@@ -196,12 +197,12 @@ class HeteroGraphPlotter2D():
             fig.set_figwidth(side_l)
             fig.set_figheight(side_l)
 
-            plt.ylim(0,1200)
-            plt.xlim(0,1200)
+            plt.ylim(1216,0)
+            plt.xlim(0,1216)
 
         else:
-            ax.set_ylim(0,1200)
-            ax.set_xlim(0,1200)
+            ax.set_ylim(1216,0)
+            ax.set_xlim(0,1216)
             ax.set_yticklabels([])
             ax.set_xticklabels([])
 
@@ -261,15 +262,17 @@ class HeteroGraphPlotter2D():
             scale_alpha_2[scale_alpha_2 < 0.2] = 0.2
             scale_alpha_3[scale_alpha_3 < 0.2] = 0.2
 
-            power_norm = PowerNorm(gamma=0.5, vmin=lower_range, vmax=upper_range)
+            #power_norm = PowerNorm(gamma=0.5, vmin=lower_range, vmax=upper_range)
 
-            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Oranges", zorder = 2, alpha= scale_alpha_1, norm=power_norm) # vmin = lower_range, vmax = upper_range, #,alpha = sft_max1 
-            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= scale_alpha_2, marker = "s" , norm= power_norm) #alpha = sft_max2, vmin = lower_range, vmax = upper_range 
-            sc3 = ax.scatter(het_graph3_pos[:,1], het_graph3_pos[:,0], s = 16, c = sft_max3, cmap = "Oranges", zorder = 2, alpha= scale_alpha_3, marker = "D" , norm= power_norm) #alpha = sft_max2, vmin = lower_range, vmax = upper_range
+            sc1 = ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0], s = 8, c = sft_max1, cmap = "Blues", zorder = 2, alpha= scale_alpha_1,  vmin = lower_range, vmax = upper_range) # vmin = lower_range, vmax = upper_range, #,alpha = sft_max1 
+            sc2 = ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0], s = 12, c = sft_max2, cmap = "Oranges", zorder = 2, alpha= scale_alpha_2, marker = "s" ,  vmin = lower_range, vmax = upper_range) #alpha = sft_max2, vmin = lower_range, vmax = upper_range 
+            sc3 = ax.scatter(het_graph3_pos[:,1], het_graph3_pos[:,0], s = 16, c = sft_max3, cmap = "Reds", zorder = 2, alpha= scale_alpha_3, marker = "D" , vmin = lower_range, vmax = upper_range) #norm= power_norm#alpha = sft_max2, vmin = lower_range, vmax = upper_range
             #[:,self.cls]
             #[:,self.cls]
 
+            plt.colorbar(sc1, label = "Node Importance")
             plt.colorbar(sc2, label = "Node Importance")
+            plt.colorbar(sc3, label = "Node Importance")
         else:
             ax.scatter(het_graph1_pos[:,1], het_graph1_pos[:,0],alpha = 0.8, s = 8)
             ax.scatter(het_graph2_pos[:,1], het_graph2_pos[:,0],alpha = 0.8, s = 12, marker = "s")
