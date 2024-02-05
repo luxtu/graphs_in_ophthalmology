@@ -126,7 +126,8 @@ class graphClassifierHetero():
             if self.smooth_label_loss:
                 loss = smoothed_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
             else:
-                loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+                #loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+                loss = self.lossFunc(out, data.y)
 
             #loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
             loss.backward()  # Derive gradients.
@@ -263,8 +264,8 @@ class graphClassifierSimple():
             if self.smooth_label_loss:
                 loss = smoothed_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
             else:
-                loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
-
+                #loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+                loss = self.lossFunc(out, data.y)
             #loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
             loss.backward()  # Derive gradients.
             self.optimizer.step()  # Update parameters based on gradients.
