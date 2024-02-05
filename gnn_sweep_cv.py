@@ -21,7 +21,7 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 # Define sweep config
 sweep_configuration = {
     "method": "random",
-    "name": "Keep Has Node at Sample Border, Random Search 3 Class, CL Stats, Region Intensity Deviations, Split 4, Eliminated Features, Smooth Label Loss(Really), Graph Cleaning, Faz Node, Isolated Nodes Not Removed", #  CL Stats, Region Intensity Deviations,
+    "name": "Random Search 3 Class, CL Stats, Region Intensity Deviations, Split 5, Eliminated Features, Smooth Label Loss(Really), Graph Cleaning, Faz Node, Isolated Nodes Not Removed, Vessel region intensities", #  CL Stats, Region Intensity Deviations,
     "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
         "batch_size": {"values": [16, 32, 64]},
@@ -31,7 +31,7 @@ sweep_configuration = {
         "hidden_channels": {"values": [16, 32, 64]}, #[64, 128]
         "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
         "num_layers": {"values": [1,2,5]},
-        "aggregation_mode": {"values": ["mean", "add_max", "max_mean","add_mean"]},# removed, "add", "max", "add_mean" #  "add"           "mean", "add_max", "max_mean",
+        "aggregation_mode": {"values": ["mean", "add_max", "max_mean","add_mean"]},# removed, "add", "max", "add_mean" #  "add" "mean", "add_max", "max_mean",
         "pre_layers": {"values": [1,2,4]},
         "post_layers": {"values": [1,2,4]},
         "final_layers": {"values": [1,2,4]},
@@ -45,14 +45,14 @@ sweep_configuration = {
         "heterogeneous_conv": {"values": ["gat", "sage", "graph"]},
         "activation": {"values": ["relu", "leaky", "elu"]},
         "faz_node": {"values": [True]},
-        "split": {"values": [4]},
+        "split": {"values": [5]},
         "start_rep": {"values": [True, False]},
         "aggr_faz": {"values": [True, False]},
         "smooth_label_loss": {"values": [True, False]},
     },
 }
 
-sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class cleaned graphs")
+sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class_cleaned_graphs_vessel_region_props")
 # loading data
 
 data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
@@ -145,10 +145,13 @@ print(f"Final test dataset length: {len(final_test_dataset)}")
 #cv_dataset.update_class(octa_dr_dict)
 image_path = f"../data/{data_type}_images"
 json_path = f"../data/{data_type}_json"
+seg_folder = f"../data/{data_type}_seg"
 seg_size = 1216
 
-cv_dataset_cl = prep.add_centerline_statistics_multi(cv_dataset, image_path, json_path, seg_size)
-final_test_dataset_cl = prep.add_centerline_statistics_multi(final_test_dataset, image_path, json_path, seg_size)
+#cv_dataset_cl = prep.add_centerline_statistics_multi(cv_dataset, image_path, json_path, seg_size)
+#final_test_dataset_cl = prep.add_centerline_statistics_multi(final_test_dataset, image_path, json_path, seg_size)
+cv_dataset_cl = prep.add_vessel_region_statistics_multi(cv_dataset, image_path, json_path, seg_folder)
+final_test_dataset_cl = prep.add_vessel_region_statistics_multi(final_test_dataset, image_path, json_path, seg_folder)
 
 # clean the data
 cv_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(cv_dataset_cl)
@@ -177,7 +180,7 @@ with open("feature_name_dict.json", "r") as file:
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
-eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "maxRadiusStd"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
                       "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]}
 
 #eliminate_features = {"graph_1":["maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd", "minRadiusAvg",  "avgRadiusStd", "roundnessStd", "roundnessAvg", "curveness"], 
@@ -345,7 +348,7 @@ def main():
 
 
 
-        if val_bal_acc > best_val_bal_acc:
+        if val_bal_acc > best_val_bal_acc and train_bal_acc > 0.65: # only update if the training accuracy is high enough, is now not really best val bac anymore, but best val bac with high enough train acc
             best_val_bal_acc = val_bal_acc
             if best_val_bal_acc > 0.65:
 
