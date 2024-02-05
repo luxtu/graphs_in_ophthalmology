@@ -608,6 +608,7 @@ class GNN_global_node(torch.nn.Module):
             conv = HeteroConv({
                 ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
                 ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),
                 ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
                 ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
             }, aggr=conv_aggr)
