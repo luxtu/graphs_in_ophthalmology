@@ -17,6 +17,27 @@ def vvg_df_to_centerline_array(vvg_df_edges,vvg_df_nodes, shape):
     return cl_arr
 
 
+def vvg_df_to_centerline_array_unique_label(vvg_df_edges,vvg_df_nodes, shape, vessel_only = False):
+
+    cl_arr = np.zeros(shape, dtype=np.uint16)
+    label = 1
+    for cl in vvg_df_edges["pos"]:
+        for pos in cl:
+            cl_arr[int(pos[0]), int(pos[1])] = label
+        label += 1
+
+    if vessel_only:
+        return cl_arr
+    
+    for i, cl in enumerate(vvg_df_nodes["voxel_pos"]):
+        for pos in cl:
+            cl_arr[int(pos[0]), int(pos[1])] = label
+
+            if vvg_df_nodes["radius"][i] >1:
+                cl_arr = color_neighbor_pixels(cl_arr, pos, vvg_df_nodes["radius"][i], value = label)
+
+    return cl_arr
+
 
 
 """def color_neighbor_pixels(arr, pos, radius):
@@ -38,7 +59,7 @@ def vvg_df_to_centerline_array(vvg_df_edges,vvg_df_nodes, shape):
 
     return arr"""
 
-def color_neighbor_pixels(arr, pos, radius):
+def color_neighbor_pixels(arr, pos, radius, value = 1):
     # set all pixels in arr around pos to 1
     # radius is the radius of the circle
     # pos is the center of the circle
@@ -99,6 +120,6 @@ def color_neighbor_pixels(arr, pos, radius):
 
     arr_slice = arr[x_start:x_end, y_start:y_end]
     #mask = mask[:arr_slice.shape[0], :arr_slice.shape[1]]
-    arr[x_start:x_end, y_start:y_end][mask] = 1
+    arr[x_start:x_end, y_start:y_end][mask] = value
 
     return arr
