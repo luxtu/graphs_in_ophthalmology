@@ -1,6 +1,6 @@
 
 
-def _calculate_adaptive_node_threshold(explanation_graph):
+def _calculate_adaptive_node_threshold(explanation_graph, explained_gradient = 0.95):
     """
     Calculate the threshold for the node importance such that 95% of the total gradient is explained (without the gradients from nodes that contribute less than 0.05% to the total gradient)
     """
@@ -16,11 +16,12 @@ def _calculate_adaptive_node_threshold(explanation_graph):
         total_grad += abs_dict[key].abs().sum()
     node_value = torch.cat([abs_dict[key].abs().sum(dim=-1) for key in explanation_graph.node_mask_dict.keys()], dim=0)
     sorted_node_value = torch.sort(node_value, descending=True)[0]
-    # get rid of the nodes that contribute less than 0.1% to the total gradient
+    # get rid of the nodes that contribute less than 0.05% to the total gradient
     sorted_node_value = sorted_node_value[sorted_node_value > 0.0005 * total_grad]
     cum_sum = torch.cumsum(sorted_node_value, dim=0)
     cropped_grad = cum_sum[-1]
-    threshold = sorted_node_value[cum_sum < 0.95 * cropped_grad][-1]
+    threshold = sorted_node_value[cum_sum < explained_gradient * cropped_grad][-1] # 30
+
 
     return threshold
 
@@ -86,10 +87,10 @@ def _feature_importance_plot(explanation, path, features_label_dict, score):
     plt.close()
 
 
-def store_relevant_nodes_csv(explanation_graph, hetero_graph, path, features_label_dict, faz_node = False):
+def store_relevant_nodes_csv(explanation_graph, hetero_graph, path, features_label_dict, faz_node = False, explained_gradient = 0.95):
 
     import pandas as pd
-    het_graph_rel_pos_dict = identifiy_relevant_nodes(explanation_graph, hetero_graph, faz_node = faz_node)
+    het_graph_rel_pos_dict = identifiy_relevant_nodes(explanation_graph, hetero_graph, explained_gradient = explained_gradient, faz_node = faz_node, )
 
     data_label = hetero_graph.graph_id[0]
     # get the features and gradients of the relevant nodes
@@ -114,10 +115,10 @@ def store_relevant_nodes_csv(explanation_graph, hetero_graph, path, features_lab
 
 
 
-def identifiy_relevant_nodes(explanation_graph, hetero_graph, faz_node = False):
+def identifiy_relevant_nodes(explanation_graph, hetero_graph, explained_gradient, faz_node = False):
 
     import numpy as np
-    threshold = _calculate_adaptive_node_threshold(explanation_graph)
+    threshold = _calculate_adaptive_node_threshold(explanation_graph, explained_gradient = explained_gradient)
 
     graph_names = ["graph_1", "graph_2"]
     if faz_node:
@@ -190,7 +191,7 @@ def adaptive_important_nodes(explanation_graph, hetero_graph):
 
 
 
-def visualize_feature_importance(explanation, hetero_graph, path, features_label_dict, threshold = None):
+def visualize_feature_importance(explanation, hetero_graph, path, features_label_dict, explained_gradient = None):
     """
     Wrapper for the pytorch geom function, since it does not include tight layout.
     If there is no threshold, all the nodes are considered for the importance score.
@@ -208,7 +209,7 @@ def visualize_feature_importance(explanation, hetero_graph, path, features_label
 
     # how can the features still be negative?
 
-    if threshold is None:
+    if explained_gradient is None:
 
 
         #score = torch.cat([node_mask.sum(dim=0) for node_mask in work_dict.values()], dim=0) # dim 0 is the feature dimension
@@ -220,13 +221,13 @@ def visualize_feature_importance(explanation, hetero_graph, path, features_label
             score[key] = work_dict[key].sum(dim=0).cpu().numpy()
 
 
-    elif threshold == "adaptive":
+    else:
 
         faz_node = False
         if "faz" in explanation.node_mask_dict.keys():
             faz_node = True
 
-        het_graph_rel_pos_dict = identifiy_relevant_nodes(explanation, hetero_graph, faz_node = faz_node)
+        het_graph_rel_pos_dict = identifiy_relevant_nodes(explanation, hetero_graph, explained_gradient = explained_gradient, faz_node = faz_node, )
 
         # print number of relevant nodes
         for key in explanation.node_mask_dict.keys():
@@ -286,8 +287,9 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
         side_l = 5.5
         fig.set_figwidth(side_l)
         fig.set_figheight(side_l)
-        plt.ylim(0,1200)
-        plt.xlim(0,1200)
+        plt.ylim(1216,0)
+        plt.xlim(0,1216)
+        ax = [ax]
     else:
         # check if the ax is a list or np array
         if isinstance(ax, list) or isinstance(ax, np.ndarray):
@@ -329,11 +331,14 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
 
             cum_sum = torch.cumsum(sorted_edge_value, dim=0)
             cropped_grad = cum_sum[-1]
-            edge_threshold = sorted_edge_value[cum_sum < 0.95 * total_grad][-1]
+            edge_threshold = sorted_edge_value[cum_sum < 0.95 * total_grad][-1] # 0.95, 
 
             #print("edge_threshold", avg_grad)
             #edge_threshold = max(avg_grad, 0.05*threshold) # max_val * 0.01
             #print("edge_threshold", edge_threshold)
+
+        elif edge_threshold == "node_threshold":
+            edge_threshold = threshold*0.00001
 
     het_graph_rel_pos_dict = {}
 
@@ -351,6 +356,7 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
 
         for ax_ax in ax:
             ax_ax.scatter(het_graph_rel_pos_dict[graph_name][:,1], het_graph_rel_pos_dict[graph_name][:,0], zorder = 2, s = s_list[idx], alpha= 0.9, marker = marker_list[idx], c = colors[idx])
+
         
 
     if edges:
@@ -361,14 +367,17 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
         het_graph1_rel_edges = het_graph1_rel_edges.cpu().detach().numpy()
         het_graph2_rel_edges = het_graph2_rel_edges.cpu().detach().numpy()
 
-        het_graph12_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name] > edge_threshold
-        het_graph21_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name] > edge_threshold
+        print("het_graph1_rel_edges", het_graph1_rel_edges.sum())
+        print("het_graph2_rel_edges", het_graph2_rel_edges.sum())
 
-        if faz_node:
-            het_graph13_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_3_name] > edge_threshold
-            het_graph31_rel_edges = explanation_graph.edge_mask_dict[graph_3_name, "rev_to", graph_1_name] > edge_threshold
-            het_graph23_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_3_name] > edge_threshold
-            het_graph32_rel_edges = explanation_graph.edge_mask_dict[graph_3_name, "to", graph_2_name] > edge_threshold
+        #het_graph12_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name] > edge_threshold
+        #het_graph21_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name] > edge_threshold
+
+        #if faz_node:
+        #    het_graph13_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_3_name] > edge_threshold
+        #    het_graph31_rel_edges = explanation_graph.edge_mask_dict[graph_3_name, "rev_to", graph_1_name] > edge_threshold
+        #    het_graph23_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_3_name] > edge_threshold
+        #    het_graph32_rel_edges = explanation_graph.edge_mask_dict[graph_3_name, "to", graph_2_name] > edge_threshold
 
 
         for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_1_name].edge_index.cpu().detach().numpy().T):
@@ -381,35 +390,35 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
             if het_graph2_rel_edges[i]:
                 for ax_ax in ax:
                     #ax_ax.plot(het_graph2_pos[edge,1], het_graph2_pos[edge,0], c="blue",linewidth=1, alpha=0.5, zorder = 1)
-                    ax_ax.plot(het_graph_pos[graph_2_name][edge,1], het_graph_pos[graph_2_name][edge,0], c="blue",linewidth=1, alpha=0.5, zorder = 1)
-
-        for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
-            if het_graph12_rel_edges[i] or het_graph21_rel_edges[i]:
-                #x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
-                #y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
-                x_pos = (het_graph_pos[graph_1_name][edge[0],1], het_graph_pos[graph_2_name][edge[1],1])
-                y_pos = (het_graph_pos[graph_1_name][edge[0],0], het_graph_pos[graph_2_name][edge[1],0])
-                for ax_ax in ax:
-                    ax_ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
-
-        if faz_node:
-            for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_3_name].edge_index.cpu().detach().numpy().T):
-                if het_graph13_rel_edges[i] or het_graph31_rel_edges[i]:
-                    #x_pos = (het_graph1_pos[edge[0],1], het_graph3_pos[edge[1],1])
-                    #y_pos = (het_graph1_pos[edge[0],0], het_graph3_pos[edge[1],0])
-                    x_pos = (het_graph_pos[graph_1_name][edge[0],1], het_graph_pos[graph_3_name][edge[1],1])
-                    y_pos = (het_graph_pos[graph_1_name][edge[0],0], het_graph_pos[graph_3_name][edge[1],0])
-                    for ax_ax in ax:
-                        ax_ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
-
-            for i, edge in enumerate(hetero_graph[graph_2_name, 'rev_to', graph_3_name].edge_index.cpu().detach().numpy().T):
-                if het_graph23_rel_edges[i] or het_graph32_rel_edges[i]:
-                    #x_pos = (het_graph2_pos[edge[0],1], het_graph3_pos[edge[1],1])
-                    #y_pos = (het_graph2_pos[edge[0],0], het_graph3_pos[edge[1],0])
-                    x_pos = (het_graph_pos[graph_2_name][edge[0],1], het_graph_pos[graph_3_name][edge[1],1])
-                    y_pos = (het_graph_pos[graph_2_name][edge[0],0], het_graph_pos[graph_3_name][edge[1],0])
-                    for ax_ax in ax:
-                        ax_ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
+                    ax_ax.plot(het_graph_pos[graph_2_name][edge,1], het_graph_pos[graph_2_name][edge,0], c="orange",linewidth=1, alpha=0.5, zorder = 1)
+#
+        #for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
+        #    if het_graph12_rel_edges[i] or het_graph21_rel_edges[i]:
+        #        #x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
+        #        #y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
+        #        x_pos = (het_graph_pos[graph_1_name][edge[0],1], het_graph_pos[graph_2_name][edge[1],1])
+        #        y_pos = (het_graph_pos[graph_1_name][edge[0],0], het_graph_pos[graph_2_name][edge[1],0])
+        #        for ax_ax in ax:
+        #            ax_ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
+#
+        #if faz_node:
+        #    for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_3_name].edge_index.cpu().detach().numpy().T):
+        #        if het_graph13_rel_edges[i] or het_graph31_rel_edges[i]:
+        #            #x_pos = (het_graph1_pos[edge[0],1], het_graph3_pos[edge[1],1])
+        #            #y_pos = (het_graph1_pos[edge[0],0], het_graph3_pos[edge[1],0])
+        #            x_pos = (het_graph_pos[graph_1_name][edge[0],1], het_graph_pos[graph_3_name][edge[1],1])
+        #            y_pos = (het_graph_pos[graph_1_name][edge[0],0], het_graph_pos[graph_3_name][edge[1],0])
+        #            for ax_ax in ax:
+        #                ax_ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
+#
+        #    for i, edge in enumerate(hetero_graph[graph_2_name, 'rev_to', graph_3_name].edge_index.cpu().detach().numpy().T):
+        #        if het_graph23_rel_edges[i] or het_graph32_rel_edges[i]:
+        #            #x_pos = (het_graph2_pos[edge[0],1], het_graph3_pos[edge[1],1])
+        #            #y_pos = (het_graph2_pos[edge[0],0], het_graph3_pos[edge[1],0])
+        #            x_pos = (het_graph_pos[graph_2_name][edge[0],1], het_graph_pos[graph_3_name][edge[1],1])
+        #            y_pos = (het_graph_pos[graph_2_name][edge[0],0], het_graph_pos[graph_3_name][edge[1],0])
+        #            for ax_ax in ax:
+        #                ax_ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
 
 
     if path is not None:
@@ -446,11 +455,12 @@ def visualize_node_importance_histogram(explanation_graph, path, faz_node = Fals
     #het_graph1_rel_pos = torch.log(het_graph1_rel_pos + 0.1)
     #het_graph2_rel_pos = torch.log(het_graph2_rel_pos + 0.1)
 
-    offset = 0.01
+    offset = 0.0001
+    offset = 0
 
     # set the range for the histogram
     max_val = max(het_graph1_rel_pos.cpu().detach().numpy().max(), het_graph2_rel_pos.cpu().detach().numpy().max())+offset
-    min_val = min(het_graph1_rel_pos.cpu().detach().numpy().min(), het_graph2_rel_pos.cpu().detach().numpy().min())+offset
+    min_val = offset #+min(het_graph1_rel_pos.cpu().detach().numpy().max(), het_graph2_rel_pos.cpu().detach().numpy().max())
 
     if faz_node:
         #het_graph3_rel_pos = torch.log(het_graph3_rel_pos)
@@ -464,41 +474,41 @@ def visualize_node_importance_histogram(explanation_graph, path, faz_node = Fals
 
     #max_val = offset*10**3
 
-    hist,bins = np.histogram(het_graph1_rel_pos.cpu().detach().numpy()+offset , bins = 100, range = (min_val, max_val) )
-    logbins = np.logspace(np.log10(bins[0]),np.log10(bins[-1]),len(bins))
+    #hist,bins = np.histogram(het_graph1_rel_pos.cpu().detach().numpy()+offset , bins = 100, range = (min_val, max_val) )
+    #logbins = np.logspace(np.log10(bins[0]),np.log10(bins[-1]),len(bins))
 
     # plot the histogram
-    ax.hist(het_graph1_rel_pos.cpu().detach().numpy()+offset , bins = logbins, alpha =0.5, label = "Vessel" )
-    ax.hist(het_graph2_rel_pos.cpu().detach().numpy()+offset , bins = logbins, alpha =0.5, label = "ICP Region")
+    ax.hist(het_graph1_rel_pos.cpu().detach().numpy()+offset ,bins = 100, alpha =0.5,range = (min_val, max_val), label = "Vessel" ) # bins = logbins,
+    ax.hist(het_graph2_rel_pos.cpu().detach().numpy()+offset ,bins = 100, alpha =0.5, range = (min_val, max_val), label = "ICP Region")
     if faz_node:
-        ax.hist(het_graph3_rel_pos.cpu().detach().numpy() +offset, bins = logbins, alpha =0.5, label = "FAZ")
+        ax.hist(het_graph3_rel_pos.cpu().detach().numpy() +offset,bins = 100, range = (min_val, max_val),  alpha =0.5, label = "FAZ")
 
     # create a legend for the histogram
     ax.legend(loc='upper right')
 
-    plt.xlabel("Node importance")
+    plt.xlabel("Node importance (Abs sum of gradients)")
     plt.ylabel("Number of nodes")
 
 
-    plt.xscale('log')
+    #plt.xscale('log')
     plt.xlim(offset, max_val)
     # set xticks according to original values before offset
     # go from 0.01 to max_val in *10 increments
 
-    tick_max_val = np.floor(np.log10(max_val)) 
-    tick_max_val = 10**tick_max_val
+    #tick_max_val = np.floor(np.log10(max_val)) 
+    #tick_max_val = 10**tick_max_val
+#
+    #x_ticks_old = []
+    #while offset < tick_max_val or len(x_ticks_old) < 2:
+    #    x_ticks_old.append(offset)
+    #    offset *= 10
+#
+    #x_ticks_new = copy.deepcopy(x_ticks_old)
+    #x_ticks_new[0] = 0
 
-    x_ticks_old = []
-    while offset < tick_max_val or len(x_ticks_old) < 2:
-        x_ticks_old.append(offset)
-        offset *= 10
-
-    x_ticks_new = copy.deepcopy(x_ticks_old)
-    x_ticks_new[0] = 0
 
 
-
-    plt.xticks(x_ticks_old, x_ticks_new)
+    #plt.xticks(x_ticks_old, x_ticks_new)
     plt.yscale('log')
     plt.tight_layout()
     plt.savefig(path)
