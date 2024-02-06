@@ -39,7 +39,7 @@ class GNN_global_node(torch.nn.Module):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.unused_faz = not aggr_faz and not start_rep and not hetero_conns
         self.faz_node = faz_node
-        if self.faz_node: #and not self.unused_faz:
+        if self.faz_node and not self.unused_faz:
             self.node_types = node_types + ["faz"] #+ ["global"]
         else:
             self.node_types = node_types
@@ -166,11 +166,6 @@ class GNN_global_node(torch.nn.Module):
 
         # Fully connected layer for classification
         self.fc = Linear(hidden_channels, out_channels)
-
-
-
-
-
 
 
 
@@ -614,11 +609,17 @@ class GNN_global_node(torch.nn.Module):
             }, aggr=conv_aggr)
 
         else:
-            conv = HeteroConv({
-                ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
-                ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-                ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),  
-            }, aggr=conv_aggr)
+            if self.unused_faz:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                }, aggr=conv_aggr)
+            else:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),  
+                }, aggr=conv_aggr)
 
 
         return conv
