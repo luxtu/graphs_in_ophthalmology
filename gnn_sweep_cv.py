@@ -21,17 +21,17 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 # Define sweep config
 sweep_configuration = {
     "method": "random",
-    "name": "Random Search 3 Class, CL Stats, Region Intensity Deviations, Split 5, Eliminated Features, Smooth Label Loss(Really), Graph Cleaning, Faz Node, Isolated Nodes Not Removed, Vessel region intensities", #  CL Stats, Region Intensity Deviations,
+    "name": "Max Features, Random Search 3 Class, CL Stats, Split 3, Eliminated Features, Smooth Label Loss, Graph Cleaning, Vessel region stats, Region Intensity Deviations", #  CL Stats, Region Intensity Deviations,
     "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
-        "batch_size": {"values": [16, 32, 64]},
+        "batch_size": {"values": [1, 8, 16, 32, 64]},
         "epochs": {"values": [100]},
         "lr": {"max": 0.01, "min": 0.001}, # learning rate to high does not work
         "weight_decay": {"max": 0.01, "min": 0.00001},
         "hidden_channels": {"values": [16, 32, 64]}, #[64, 128]
         "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
         "num_layers": {"values": [1,2,5]},
-        "aggregation_mode": {"values": ["mean", "add_max", "max_mean","add_mean"]},# removed, "add", "max", "add_mean" #  "add" "mean", "add_max", "max_mean",
+        "aggregation_mode": {"values": ["mean", "add_max", "max_mean"]},# removed, "add", "max", "add_mean" #  "add" "mean", "add_max", "max_mean", ,"add_mean"
         "pre_layers": {"values": [1,2,4]},
         "post_layers": {"values": [1,2,4]},
         "final_layers": {"values": [1,2,4]},
@@ -45,7 +45,7 @@ sweep_configuration = {
         "heterogeneous_conv": {"values": ["gat", "sage", "graph"]},
         "activation": {"values": ["relu", "leaky", "elu"]},
         "faz_node": {"values": [True]},
-        "split": {"values": [5]},
+        "split": {"values": [3]},
         "start_rep": {"values": [True, False]},
         "aggr_faz": {"values": [True, False]},
         "smooth_label_loss": {"values": [True, False]},
@@ -150,19 +150,31 @@ seg_size = 1216
 
 #cv_dataset_cl = prep.add_centerline_statistics_multi(cv_dataset, image_path, json_path, seg_size)
 #final_test_dataset_cl = prep.add_centerline_statistics_multi(final_test_dataset, image_path, json_path, seg_size)
-cv_dataset_cl = prep.add_vessel_region_statistics_multi(cv_dataset, image_path, json_path, seg_folder)
-final_test_dataset_cl = prep.add_vessel_region_statistics_multi(final_test_dataset, image_path, json_path, seg_folder)
+#cv_dataset_cl = prep.add_vessel_region_statistics_multi(cv_dataset, image_path, json_path, seg_folder)
+#final_test_dataset_cl = prep.add_vessel_region_statistics_multi(final_test_dataset, image_path, json_path, seg_folder)
+#
+## clean the data
+#cv_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(cv_dataset_cl)
+#final_test_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(final_test_dataset_cl)
+#
+#cv_dataset_dict = dict(zip([graph.graph_id for graph in cv_dataset.hetero_graph_list], cv_dataset.hetero_graph_list))
+#final_test_dataset_dict = dict(zip([graph.graph_id for graph in final_test_dataset.hetero_graph_list], final_test_dataset.hetero_graph_list))
+#
+## set the dictionaries
+#cv_dataset.hetero_graphs = cv_dataset_dict
+#final_test_dataset.hetero_graphs = final_test_dataset_dict
 
-# clean the data
-cv_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(cv_dataset_cl)
-final_test_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(final_test_dataset_cl)
+cv_pickle_processed = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features_processed_vessel_region.pkl" # _dataset_faz_isol_not_removed_more_features_processed_cl.pkl" # _isol_not_removed_more_features
+final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features_processed_vessel_region.pkl" # _dataset_faz_isol_not_removed_more_features_processed_cl.pkl" #_isol_not_removed_more_features
+split = 1
 
-cv_dataset_dict = dict(zip([graph.graph_id for graph in cv_dataset.hetero_graph_list], cv_dataset.hetero_graph_list))
-final_test_dataset_dict = dict(zip([graph.graph_id for graph in final_test_dataset.hetero_graph_list], final_test_dataset.hetero_graph_list))
+import pickle
+#load the pickled datasets
+with open(cv_pickle_processed, "rb") as file:
+    cv_dataset = pickle.load(file)
 
-# set the dictionaries
-cv_dataset.hetero_graphs = cv_dataset_dict
-final_test_dataset.hetero_graphs = final_test_dataset_dict
+with open(final_test_pickle_processed, "rb") as file:
+    final_test_dataset = pickle.load(file)
 
 
 split = sweep_configuration["parameters"]["split"]["values"][0]
@@ -175,19 +187,22 @@ train_dataset, val_dataset, test_dataset = prep.adjust_data_for_split(cv_dataset
 #prep.remove_label_noise(train_dataset, label_noise_dict)
 
 
-with open("feature_name_dict.json", "r") as file:
+with open("feature_name_dict_max.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
-eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
-                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]}
+eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd", "centroid-0", "centroid-1", "area","extent", "centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "equivalent_diameter", "q10", "q25", "q75", "q90","q95", "intensity_max"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "intensity_max", "centroid-0", "centroid-1"]}
+
+#eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+#                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]}
 
 #eliminate_features = {"graph_1":["maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd", "minRadiusAvg",  "avgRadiusStd", "roundnessStd", "roundnessAvg", "curveness"], 
 #                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "intensity_max", "centroid-0", "centroid-1", "solidity", "extent", "degree"]}
 
 if faz_node_bool:
-    eliminate_features["faz"] = ["centroid_weighted-0", "centroid_weighted-1","feret_diameter_max", "orientation"] # , "centroid-0", "centroid-1", "solidity", "extent"
+    eliminate_features["faz"] = ["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"] # , "centroid-0", "centroid-1", "solidity", "extent"
 
 
 # get positions of features to eliminate and remove them from the feature label dict and the graphs
