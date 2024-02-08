@@ -13,6 +13,7 @@ import matplotlib.colors as mcolors
 from skimage import transform
 import torch
 from explainability import torch_geom_explanation
+from utils import vvg_tools
 
 
 
@@ -73,16 +74,108 @@ class RawDataExplainer():
             faz_region_label = region_labels[idx_y,600]
         return faz_region_label
 
-    def _heatmap_relevant_vessels(self, raw, relevant_vessels_pre, vvg_df_edges, explanations):
+    def _heatmap_relevant_vessels(self, raw, relevant_vessels_pre, vvg_df_edges, explanations, graph, vvg_df_nodes, matched_list):
         # for the vessels create a mask that containts the centerline of the relevant vessels
         # also store the positions of the center points on the relevant vessels
 
-
-        importance_array = explanations.node_mask_dict["graph_1"].abs().sum(dim=-1).cpu().detach().numpy()
-        print(len(importance_array))
-        print(len(vvg_df_edges["pos"]))
-
+        #  match the vessels in the graph to the vessels in the vvg
+        cl_arr = np.zeros_like(raw, dtype=np.float32)
+        vessel_alphas = np.zeros_like(raw, dtype=np.float32)
+        #extract the node positions from the graph
+        node_positions = graph["graph_1"].pos.cpu().detach().numpy()
+        importance = explanations.node_mask_dict["graph_1"].abs().sum(dim=-1).cpu().detach().numpy()
+        # get the positions of the relevant vessels
         relevant_vessels = np.where(relevant_vessels_pre)[0]
+        # get the center points of the relevant vessels
+        center_points = node_positions[relevant_vessels]
+        # get the importance of the relevant vessels
+        relevant_importance = importance[relevant_vessels]
+        # get the positions of the nodes in vvg_df_nodes
+        bifurcation_nodes = vvg_df_nodes["pos"].values
+        # calculate the center point for all vessels in the vvg
+        center_points_vvg = []
+        for i, node1 in enumerate(vvg_df_edges["node1"]):
+            node2 = vvg_df_edges["node2"].iloc[i]
+            # get the positions of the nodes
+            pos1 = bifurcation_nodes[node1]
+            pos2 = bifurcation_nodes[node2]
+            # calculate the center point
+            center_point = (np.array(pos1) + np.array(pos2))/2
+            center_points_vvg.append(center_point)
+        center_points_vvg = np.array(center_points_vvg)[:,:2]
+
+        # match the center points of the relevant vessels to the center points of the vvg
+
+        # create a regions for every vessel in the vvgs
+        image, seg = matched_list
+        # load the image
+        #image = Image.open(image_file)
+        ## turn the iamge into a numpy array
+        #try:
+        #    image = np.array(image)[:,:,0]
+        #except IndexError:
+        #    image = np.array(image)
+        ## load the seg
+        #seg = Image.open(seg_file)
+        # turn the seg into a numpy array
+        #seg = np.array(seg)
+        # make seg binary
+        seg = seg > 0
+        # get the ratio between the image size and the seg size
+        #image = transform.resize(image, seg.shape, order = 0, preserve_range = True)
+
+        final_seg_label = np.zeros_like(seg, dtype = np.uint16)
+        final_seg_label[seg!=0] = 1
+        
+        cl_vessel = vvg_tools.vvg_df_to_centerline_array_unique_label(vvg_df_edges, vvg_df_nodes, (1216, 1216), vessel_only=True)
+        label_cl = cl_vessel# measure.label(cl_vessel)
+        label_cl[label_cl!=0] = label_cl[label_cl!=0] + 1
+        final_seg_label[label_cl!=0] = label_cl[label_cl!=0]
+
+        for i in range (100):
+            label_cl = morphology.dilation(label_cl, morphology.square(3))
+            label_cl = label_cl * seg
+            # get the values of final_seg_label where no semantic segmentation is present
+            final_seg_label[final_seg_label==1] = label_cl[final_seg_label==1]
+            # get indices where label_cl==0 and seg !=0
+            mask = (final_seg_label == 0) & (seg != 0)
+            final_seg_label[mask] = 1
+
+        # pixels that are still 1 are turned into 0
+        final_seg_label[final_seg_label==1] = 0
+        # labels for the rest are corrected by -1
+        final_seg_label[final_seg_label!=0] = final_seg_label[final_seg_label!=0] - 1
+        cl_center_points = []
+        for i, cp in enumerate(center_points):
+            # get the closest center point in the vvg
+            dist = np.linalg.norm(center_points_vvg - cp, axis=1)
+            closest_vessel = np.argmin(dist)
+            # get the closest vessel in the vessel_vvg
+            positions = vvg_df_edges["pos"].iloc[closest_vessel]
+            frequent_label = {}
+            cl_center_points.append(positions[int(len(positions)/2)])
+            for pos in positions:
+                label = final_seg_label[int(pos[0]), int(pos[1])]
+                if label in frequent_label:
+                    frequent_label[label] += 1
+                else:
+                    frequent_label[label] = 1
+            # get the most frequent label, by the number of occurences
+            max_label = max(frequent_label, key=frequent_label.get)
+            # set the cl_arr_value to the importance of the vessel
+            cl_arr[final_seg_label == max_label] = relevant_importance[i]
+            vessel_alphas[final_seg_label == max_label] = 0.7
+        
+        cl_center_points = np.array(cl_center_points)
+
+
+        return cl_arr, cl_center_points, vessel_alphas
+
+
+
+
+        """
+        importance_array = explanations.node_mask_dict["graph_1"].abs().sum(dim=-1).cpu().detach().numpy()
         cl_arr = np.zeros_like(raw, dtype=np.float32)
         vessel_alphas = np.zeros_like(raw, dtype=np.float32)
         cl_center_points = []
@@ -123,6 +216,7 @@ class RawDataExplainer():
             cl_center_points = np.expand_dims(cl_center_points, axis=0)
 
         return cl_arr, cl_center_points, vessel_alphas 
+        """
 
 
 
@@ -245,10 +339,9 @@ class RawDataExplainer():
         return regions, alphas
 
 
-    def create_explanation_image(self, explanation, hetero_graph,  graph_id, path, faz_node=False, label_names = None, target = None, heatmap = False, explained_gradient = 0.95, **kwargs):
+    def create_explanation_image(self, explanation, hetero_graph,  graph_id, path, label_names = None, target = None, heatmap = False, explained_gradient = 0.95):
         
         
-        self.faz_node = faz_node
         # extract the relevant segmentation, raw image and vvg
         # search the file strings for the graph_id
         seg_file, raw_file, vvg_file = self._process_files(graph_id)
@@ -263,6 +356,9 @@ class RawDataExplainer():
         raw = transform.resize(raw, seg.shape, order = 0, preserve_range = True)
 
 
+        self.faz_node = False
+        if "faz" in explanation.node_mask_dict.keys():
+            self.faz_node = True
         # relevant nodes dict, getting the nodes above a certain threshold, includes all types of nodes
         het_graph_rel_pos_dict  = torch_geom_explanation.identifiy_relevant_nodes(explanation,hetero_graph, faz_node=self.faz_node, explained_gradient= explained_gradient)
 
@@ -271,7 +367,7 @@ class RawDataExplainer():
         
         # extract the relevant vessels, with a segmentation mask and the center points of the relevant vessels
         if heatmap:
-            cl_arr, cl_center_points, vessel_alphas = self._heatmap_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, explanation)
+            cl_arr, cl_center_points, vessel_alphas = self._heatmap_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, explanation, hetero_graph, vvg_df_nodes, [raw, seg])
         else:
             cl_arr, cl_center_points = self._color_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, )
 
@@ -292,6 +388,9 @@ class RawDataExplainer():
             df.index = np.arange(len(df))
             # check if the faz region is relevant
             relevant_faz = np.where(het_graph_rel_pos_dict["faz"])[0]
+        else:
+            faz_region_label = None
+            relevant_faz = None
 
         # extract relevant positions
         relevant_regions = np.where(het_graph_rel_pos_dict["graph_2"])[0]
@@ -360,7 +459,7 @@ class RawDataExplainer():
             ax[1].scatter(cl_center_points[:,1], cl_center_points[:,0], c="blue", s=15, alpha=1)
 
         # plot center of faz region if it is relevant
-        if faz_node and relevant_faz is not None:
+        if self.faz_node and relevant_faz is not None:
             # get the center of the faz region
             faz_pos = df_faz_node[["centroid-1", "centroid-0"]].values
             ax[0].scatter(faz_pos[0], faz_pos[1], c="red", s=15, alpha=1, marker="D")
