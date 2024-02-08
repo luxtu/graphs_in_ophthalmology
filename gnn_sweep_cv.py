@@ -21,38 +21,39 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 # Define sweep config
 sweep_configuration = {
     "method": "random",
-    "name": "Max Features, Random Search 3 Class, CL Stats, Split 3, Eliminated Features, Smooth Label Loss, Graph Cleaning, Vessel region stats, Region Intensity Deviations", #  CL Stats, Region Intensity Deviations,
+    "name": "Large Layer Num, Fusion at prediction,Skip Conns, Max Features, Random Search 3 Class, CL Stats, Split 5, Eliminated Features, Graph Cleaning, Vessel region stats, Region Intensity Deviations", #  CL Stats, Region Intensity Deviations,
     "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
-        "batch_size": {"values": [1, 8, 16, 32, 64]},
+        "batch_size": {"values": [8, 16, 32, 64]},
         "epochs": {"values": [100]},
-        "lr": {"max": 0.01, "min": 0.001}, # learning rate to high does not work
+        "lr": {"max": 0.01, "min": 0.0001}, # learning rate to high does not work
         "weight_decay": {"max": 0.01, "min": 0.00001},
         "hidden_channels": {"values": [16, 32, 64]}, #[64, 128]
         "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
-        "num_layers": {"values": [1,2,5]},
-        "aggregation_mode": {"values": ["mean", "add_max", "max_mean"]},# removed, "add", "max", "add_mean" #  "add" "mean", "add_max", "max_mean", ,"add_mean"
-        "pre_layers": {"values": [1,2,4]},
+        "num_layers": {"values": [4, 5, 6]}, # , 6, 8, 10,  1,2 
+        "aggregation_mode": {"values": ["mean", "add_max", "max_mean"]},# removed, "add", "max", "add_mean" #  "add" "mean", "add_max", "max_mean", ,"add_mean" # "mean", "add_max", "max_mean"
+        "pre_layers": {"values": [0]}, # less is better here... ,2,4
         "post_layers": {"values": [1,2,4]},
         "final_layers": {"values": [1,2,4]},
         "batch_norm": {"values": [True, False]},
-        "hetero_conns": {"values": [True, False]},
+        "hetero_conns": {"values": [True]}, # , False
         "faz_conns": {"values": [True]}, #, False
         "conv_aggr": {"values": ["cat", "sum", "mean"]}, # cat, sum, mean
         "class_weights": {"values": ["balanced"]}, # "balanced", #  # "unbalanced", # , "weak_balanced" 
         "dataset": {"values": ["DCP"]}, #, "DCP"
         "homogeneous_conv": {"values": ["sage"]}, # removed "gat", "graph", "gcn"
-        "heterogeneous_conv": {"values": ["gat", "sage", "graph"]},
+        "heterogeneous_conv": {"values": ["gat", "sage"]}, # remove graph "graph"
         "activation": {"values": ["relu", "leaky", "elu"]},
         "faz_node": {"values": [True]},
-        "split": {"values": [3]},
-        "start_rep": {"values": [True, False]},
+        "split": {"values": [5]},
+        "start_rep": {"values": [False]}, # True, 
         "aggr_faz": {"values": [True, False]},
         "smooth_label_loss": {"values": [True, False]},
+        "skip_connection": {"values": [True, False]},
     },
 }
 
-sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class_cleaned_graphs_vessel_region_props")
+sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class_vessel_region_features")
 # loading data
 
 data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
@@ -164,8 +165,8 @@ seg_size = 1216
 #cv_dataset.hetero_graphs = cv_dataset_dict
 #final_test_dataset.hetero_graphs = final_test_dataset_dict
 
-cv_pickle_processed = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features_processed_vessel_region.pkl" # _dataset_faz_isol_not_removed_more_features_processed_cl.pkl" # _isol_not_removed_more_features
-final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features_processed_vessel_region.pkl" # _dataset_faz_isol_not_removed_more_features_processed_cl.pkl" #_isol_not_removed_more_features
+cv_pickle_processed = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl" # _dataset_faz_isol_not_removed_more_features_processed_cl.pkl" # _isol_not_removed_more_features
+final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl" # _dataset_faz_isol_not_removed_more_features_processed_cl.pkl" #_isol_not_removed_more_features
 split = 1
 
 import pickle
@@ -276,7 +277,8 @@ def main():
                                                         faz_node = wandb.config.faz_node,
                                                         start_rep = wandb.config.start_rep,
                                                         aggr_faz = wandb.config.aggr_faz,
-                                                        faz_conns= wandb.config.faz_conns
+                                                        faz_conns= wandb.config.faz_conns,
+                                                        skip_connection = wandb.config.skip_connection,
                                                         )
 
     # create data loaders for training and test set
@@ -395,4 +397,4 @@ def main():
     wandb.log({"roc": wandb.plot.roc_curve(y_true_val, best_pred, labels = label_names)})
 
 
-wandb.agent(sweep_id, function=main, count=200)
+wandb.agent(sweep_id, function=main, count=50)
