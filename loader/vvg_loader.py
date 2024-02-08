@@ -46,14 +46,17 @@ def vvg_to_df(vvg_path):
     node_id_col = []
     node_voxel_col = []
     node_radius_col = []
+    node_pos_col = []
 
     for i in data["graph"]["nodes"]:
         node_id_col.append(i["id"])
         node_voxel_col.append(i["voxels_"])
         node_radius_col.append(i["radius"])
+        node_pos_col.append(i["pos"])
 
 
-    d_nodes = {'id': node_id_col,'voxel_pos' : node_voxel_col, "radius": node_radius_col}
+
+    d_nodes = {'id': node_id_col,'voxel_pos' : node_voxel_col, "radius": node_radius_col, "pos": node_pos_col}
     df_nodes = pd.DataFrame(d_nodes)
     df_nodes.set_index('id')
 
