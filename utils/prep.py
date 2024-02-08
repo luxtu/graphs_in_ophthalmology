@@ -4,7 +4,7 @@ from tqdm import tqdm
 from utils import vvg_tools
 
 def quartiles(regionmask, intensity):
-    return np.percentile(intensity[regionmask], q=(25, 75))
+    return np.percentile(intensity[regionmask], q=(5, 10, 25, 75, 90, 95))
 
 def std_img(regionmask, intensity):
     return np.std(intensity[regionmask])
@@ -857,17 +857,24 @@ def process_data_cl_region_props(matched_list):
     final_seg_label = np.zeros_like(seg, dtype = np.uint16)
     final_seg_label[seg!=0] = 1
     cl_vessel = vvg_tools.vvg_df_to_centerline_array_unique_label(vvg_df_edges, vvg_df_nodes, (1216, 1216), vessel_only=True)
-    label_cl = measure.label(cl_vessel)
+    label_cl = cl_vessel #measure.label(cl_vessel)
     label_cl[label_cl!=0] = label_cl[label_cl!=0] + 1
     final_seg_label[label_cl!=0] = label_cl[label_cl!=0]
 
-    for i in range (40):
+    last_sum = 0
+    new_sum = None
+    ct = 0
+    while last_sum != new_sum:
+        ct += 1
+        last_sum = new_sum
+        
         label_cl = morphology.dilation(label_cl, morphology.square(3))
         label_cl = label_cl * seg
         # get the values of final_seg_label where no semantic segmentation is present
         final_seg_label[final_seg_label==1] = label_cl[final_seg_label==1]
         # get indices where label_cl==0 and seg !=0
         mask = (final_seg_label == 0) & (seg != 0)
+        new_sum = np.sum(mask)
         final_seg_label[mask] = 1
 
     # pixels that are still 1 are turned into 0
@@ -876,10 +883,36 @@ def process_data_cl_region_props(matched_list):
     final_seg_label[final_seg_label!=0] = final_seg_label[final_seg_label!=0] - 1
    
     # extract the intensity statistics for the different regions
-    props = measure.regionprops_table(final_seg_label, intensity_image=image, properties = ("intensity_mean", "intensity_max", "intensity_min" ), extra_properties= (std_img, )) # remove quartiles, shouldnt be too many properties
+    props = measure.regionprops_table(final_seg_label, intensity_image=image, properties = ('label', 'centroid',
+                                                 'area',
+                                                 'perimeter',
+                                                 'eccentricity',
+                                                 'equivalent_diameter',
+                                                 'orientation',
+                                                 'solidity',
+                                                 'feret_diameter_max',
+                                                 'extent',
+                                                 'axis_major_length',
+                                                 'axis_minor_length',
+                                                 "intensity_max",
+                                                 "intensity_mean",
+                                                 "intensity_min",
+                                                 "centroid_weighted"), extra_properties= (std_img, quartiles)) # remove quartiles, shouldnt be too many properties , "intensity_max", "intensity_min" 
     props_df = pd.DataFrame(props) 
     # match the regions with the nodes
     # iterate over the edges
+    #create array with as many nans as props_df.columns
+    # number of colums
+    df_col_num = len(props_df.columns)
+    nan_props = np.full((df_col_num), np.nan)
+
+    # print the number of rows in the df
+    #print(len(props_df))
+    # print the max labels in final_seg_label
+    #print(np.max(final_seg_label))
+    # this should be the same as the number of rows in the df, the number of vessels can differ
+    #print(len(vvg_df_edges))
+
     added_props = []
     for i in range(len(vvg_df_edges)):
         # get the positions of the centerline
@@ -887,7 +920,7 @@ def process_data_cl_region_props(matched_list):
         # check if positions is an empty list
         if len(positions) == 0:
             # as many nans as props_df.columns
-            added_props.append(np.array([np.nan, np.nan, np.nan, np.nan])) # two less np.nan without quartiles
+            added_props.append(nan_props[1:]) # two less np.nan without quartiles # , np.nan, np.nan
             continue
         # get the most frequent label in the region
         frequent_label = {}
@@ -911,12 +944,20 @@ def process_data_cl_region_props(matched_list):
         # get the properties of the region
         if max_label != 0:
             # get the column where the label is the max label
-            prop = props_df.iloc[max_label-1]
+            # get the row where 'label' is the max label
+            prop = props_df[props_df['label'] == max_label]
             # don't take the label column
-            added_props.append(np.array(prop)) # not need : [1:] if the label is not included
+            if len(np.array(prop)[0]) != df_col_num:
+                print("number of properties is not correct")
+                print(len(np.array(prop)[0]))
+                print(df_col_num)
+                print(np.array(prop)[0])
+            added_props.append(np.array(prop)[0][1:]) # not need : [1:] if the label is not included
         else:
             # give the properties nan values
-            added_props.append(np.array([np.nan, np.nan, np.nan, np.nan])) # two less np.nan without quartiles
+            added_props.append(nan_props[1:]) # two less np.nan without quartiles # , np.nan, np.nan
+            # this should not happen
+            print("max label is 0")
 
     data["graph_1"].x = torch.cat([data["graph_1"].x, torch.tensor(np.array(added_props), dtype = data["graph_1"].x.dtype)], dim=1)
     
