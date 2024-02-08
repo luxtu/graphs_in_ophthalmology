@@ -25,11 +25,13 @@ class GNN_global_node(torch.nn.Module):
                  activation = F.relu,
                  start_rep = False,
                  aggr_faz = False,
-                 faz_conns = True
+                 faz_conns = True,
+                 skip_connection = True,
                  ):
         super().__init__()
         torch.manual_seed(1234567)
 
+        self.skip_connection = skip_connection
         self.faz_conns = faz_conns
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
@@ -57,45 +59,51 @@ class GNN_global_node(torch.nn.Module):
 
         self.start_rep = start_rep
         self.aggr_faz = aggr_faz
+        if self.aggr_faz:
+            self.aggr_keys = ["graph_1", "graph_2", "faz"]
+        else:
+            self.aggr_keys = ["graph_1", "graph_2"]
 
         self.num_pre_processing_layers = num_pre_processing_layers
-        self.pre_processing_lin_layers = torch.nn.ModuleList()
-        self.pre_processing_batch_norm = torch.nn.ModuleList()
+        self.num_post_processing_layers = num_post_processing_layers
         self.num_final_lin_layers = num_final_lin_layers
 
 
         self.final_lin_layers = torch.nn.ModuleList()
 
+        if self.num_pre_processing_layers > 0:
+
+            self.pre_processing_lin_layers = torch.nn.ModuleList()
+            self.pre_processing_batch_norm = torch.nn.ModuleList()
+            for _ in range(self.num_pre_processing_layers):
+                pre_lin_dict = torch.nn.ModuleDict()
+                pre_batch_norm_dict = torch.nn.ModuleDict()
+                for node_type in self.node_types:
+                    pre_lin_dict[node_type] = Linear(-1, hidden_channels)
+                    if batch_norm:
+                        pre_batch_norm_dict[node_type] = torch.nn.BatchNorm1d(hidden_channels)
+                    else:
+                        pre_batch_norm_dict[node_type] = torch.nn.Identity()
+
+                self.pre_processing_lin_layers.append(pre_lin_dict)
+                self.pre_processing_batch_norm.append(pre_batch_norm_dict)
 
 
-        for _ in range(self.num_pre_processing_layers):
-            pre_lin_dict = torch.nn.ModuleDict()
-            pre_batch_norm_dict = torch.nn.ModuleDict()
-            for node_type in self.node_types:
-                pre_lin_dict[node_type] = Linear(-1, hidden_channels)
-                if batch_norm:
-                    pre_batch_norm_dict[node_type] = torch.nn.BatchNorm1d(hidden_channels)
-                else:
-                    pre_batch_norm_dict[node_type] = torch.nn.Identity()
-                
-            self.pre_processing_lin_layers.append(pre_lin_dict)
-            self.pre_processing_batch_norm.append(pre_batch_norm_dict)
+        if self.num_post_processing_layers > 0:
+            self.post_processing_lin_layers = torch.nn.ModuleList()
+            self.post_processing_batch_norm = torch.nn.ModuleList()
 
-        self.num_post_processing_layers = num_post_processing_layers
-        self.post_processing_lin_layers = torch.nn.ModuleList()
-        self.post_processing_batch_norm = torch.nn.ModuleList()
-
-        for _ in range(self.num_post_processing_layers):
-            post_lin_dict = torch.nn.ModuleDict()
-            post_batch_norm_dict = torch.nn.ModuleDict()
-            for node_type in self.node_types:
-                post_lin_dict[node_type] = Linear(-1, hidden_channels)
-                if batch_norm:
-                    post_batch_norm_dict[node_type] = torch.nn.BatchNorm1d(hidden_channels)
-                else:
-                    post_batch_norm_dict[node_type] = torch.nn.Identity()
-            self.post_processing_lin_layers.append(post_lin_dict)
-            self.post_processing_batch_norm.append(post_batch_norm_dict)
+            for _ in range(self.num_post_processing_layers):
+                post_lin_dict = torch.nn.ModuleDict()
+                post_batch_norm_dict = torch.nn.ModuleDict()
+                for node_type in self.node_types:
+                    post_lin_dict[node_type] = Linear(-1, hidden_channels)
+                    if batch_norm:
+                        post_batch_norm_dict[node_type] = torch.nn.BatchNorm1d(hidden_channels)
+                    else:
+                        post_batch_norm_dict[node_type] = torch.nn.Identity()
+                self.post_processing_lin_layers.append(post_lin_dict)
+                self.post_processing_batch_norm.append(post_batch_norm_dict)
 
         # handle the case where there is only one layer
         if self.num_final_lin_layers == 1:
@@ -150,11 +158,25 @@ class GNN_global_node(torch.nn.Module):
             #han_conv = HANConv(-1, hidden_channels, metadata=meta_data, heads = 1)
             #self.han_convs.append(han_conv)
 
-        self.lin1 = Linear(-1, hidden_channels, bias=False) # had *2 before
-        self.lin2 = Linear(hidden_channels, hidden_channels, bias=False) # had *2 before
-        self.lin3 = Linear(hidden_channels, out_channels, bias=False)
 
 
+
+        ################################## late fusion
+        self.final_layers_node_types = torch.nn.ModuleList()
+        for i in range(len(self.aggr_keys)):
+            final_lin_layers = torch.nn.ModuleList()
+            for j in range(self.num_final_lin_layers):
+                if j == 0:
+                    final_lin_layers.append(Linear(-1, hidden_channels))
+                elif j == self.num_final_lin_layers - 1:
+                    final_lin_layers.append(Linear(hidden_channels, out_channels))
+                else:
+                    final_lin_layers.append(Linear(hidden_channels, hidden_channels))
+            self.final_layers_node_types.append(final_lin_layers)
+
+        #self.final_lin_layers = torch.nn.ModuleList()
+        # final layer for the late fusion
+        #self.final_late_fusion = Linear(-1, out_channels)
 
 
         ######################################## testing attention addon
@@ -193,23 +215,29 @@ class GNN_global_node(torch.nn.Module):
 
        ########################################
         #pre processing
-        for i in range(len(self.pre_processing_lin_layers)):
+        if self.num_pre_processing_layers > 0:
+            for i in range(len(self.pre_processing_lin_layers)):
+                for node_type in self.node_types:
+                    x[node_type] = self.activation(self.pre_processing_batch_norm[i][node_type](self.pre_processing_lin_layers[i][node_type](x_dict[node_type]))) 
+        else:
             for node_type in self.node_types:
-                x[node_type] = self.activation(self.pre_processing_batch_norm[i][node_type](self.pre_processing_lin_layers[i][node_type](x_dict[node_type]))) 
+                x[node_type] = x_dict[node_type]
         #########################################
         #########################################
         # gnn convolutions
         for i, conv in enumerate(self.convs): # vs self.convs
             # apply the conv and then add the skip connections
 
-            x_old = x.copy()
+            if self.skip_connection:
+                x_old = x.copy()
             x = conv(x, edge_index_dict)
             if self.conv_aggr == "cat":
                 x = self.cat_comps[i](x)
 
             for node_type in self.node_types:
                 try:
-                    x[node_type] = x[node_type] + x_old[node_type] # skip connection
+                    if self.skip_connection and (i>0 or self.num_pre_processing_layers>0): # the i larger than 0 is to avoid the first layer
+                        x[node_type] = x[node_type] + x_old[node_type] # skip connection
                     #relu after skip connection
                     x[node_type] = self.activation(x[node_type])
                 except KeyError:
@@ -218,20 +246,21 @@ class GNN_global_node(torch.nn.Module):
         #########################################
         ########################################
         #post processing
-        for i in range(len(self.post_processing_lin_layers)):
-            for node_type in self.node_types:
-                try:
-                    x[node_type] = self.post_processing_batch_norm[i][node_type](self.post_processing_lin_layers[i][node_type](x[node_type]))
-                except KeyError:
-                    pass
-
-            # relu if not last layer
-            if i != len(self.post_processing_lin_layers) - 1:
+        if self.num_post_processing_layers > 0:
+            for i in range(len(self.post_processing_lin_layers)):
                 for node_type in self.node_types:
                     try:
-                        x[node_type] = self.activation(x[node_type])
+                        x[node_type] = self.post_processing_batch_norm[i][node_type](self.post_processing_lin_layers[i][node_type](x[node_type]))
                     except KeyError:
                         pass
+
+                # relu if not last layer
+                if i != len(self.post_processing_lin_layers) - 1:
+                    for node_type in self.node_types:
+                        try:
+                            x[node_type] = self.activation(x[node_type])
+                        except KeyError:
+                            pass
         #########################################
 
         self.final_conv_acts_1 = x["graph_1"]
@@ -257,13 +286,8 @@ class GNN_global_node(torch.nn.Module):
 
         # for each node type, aggregate over all nodes of that type
         type_specific_representations = []
-        # no aggregation for the faz node
-        if self.aggr_faz:
-            aggr_keys = ["graph_1", "graph_2", "faz"]
-        else:
-            aggr_keys = ["graph_1", "graph_2", ]
 
-        for key in aggr_keys:
+        for key in self.aggr_keys:
             if isinstance(self.aggregation_mode, list):
                 for j in range(len(self.aggregation_mode)):
                     # check if the aggregation mode is global_add_pool
@@ -278,6 +302,69 @@ class GNN_global_node(torch.nn.Module):
             #type_specific_representations.append(rep)
 
 
+        # get the number of aggregation modes
+        if isinstance(self.aggregation_mode, list):
+            num_aggr_modes = len(self.aggregation_mode)
+        else:
+            num_aggr_modes = 1
+        
+        # at the end this should generate a list of len(self.aggr_keys), each element is a tensor of shape (batch_size, num_aggr_modes * hidden_channels)
+        x_list = []
+        for i in range(len(self.aggr_keys)):
+            if num_aggr_modes >1:
+                cat_rep = torch.cat([type_specific_representations[i]]*num_aggr_modes, dim=1)
+                if self.start_rep:
+                    cat_start_rep = torch.cat([start_representations[i]]*num_aggr_modes, dim=1)
+                    cat_rep = torch.cat([cat_start_rep, cat_rep], dim=1)
+                    #print("Cat rep shape with start rep: ")
+                    #print(cat_rep.shape)
+                    x_list.append(cat_rep)
+                else:
+                    #print("Cat rep shape without start rep: ")
+                    #print(cat_rep.shape)
+                    x_list.append(cat_rep)
+            else:
+                if self.start_rep:
+                    cat_rep = torch.cat([start_representations[i], type_specific_representations[i]], dim=1)
+                    #print("single agg cat rep shape with start rep: ")
+                    #print(cat_rep.shape)
+                    x_list.append(cat_rep)
+                else:
+                    #print("single agg cat rep shape without start rep: ")
+                    #print(type_specific_representations[i].shape)
+                    x_list.append(type_specific_representations[i])
+
+
+
+
+
+        # process each node type separately
+        for i in range(len(self.final_layers_node_types)):
+            for j in range(len(self.final_layers_node_types[i])):
+                # this should be size (batch_size, num_aggr_modes * hidden_channels)
+                x_list[i] = self.final_layers_node_types[i][j](x_list[i])
+                if self.final_layers_node_types[i][j] != self.final_layers_node_types[i][-1]:
+                    x_list[i] = self.activation(x_list[i])
+                x_list[i] = F.dropout(x_list[i], p=self.dropout, training = self.training)
+                    #x = self.activation(x)
+                    #x = F.dropout(x, p=self.dropout, training = self.training)
+
+        # sum across x_list
+        #x = torch.stack(x_list, dim=0)
+        #x = torch.sum(x, dim=0)    
+        
+        # randomly select one of the representations for the final classification layer instead of summing them
+        # random int for the index
+        if self.training:
+            idx = torch.randint(0, len(x_list), (1,))
+            x = x_list[idx]
+        else:
+            x = torch.mean(torch.stack(x_list, dim=0), dim=0)
+                
+        return x
+
+
+
         x = torch.cat(type_specific_representations, dim=1)  
         if self.start_rep:
             x = torch.cat([x] + start_representations, dim=1)
@@ -287,6 +374,7 @@ class GNN_global_node(torch.nn.Module):
         #x = x_start
         #x = torch.cat([x_start, x], dim=1)
         #x = F.dropout(x, p=self.dropout, training = self.training)
+
 
         for lin in self.final_lin_layers:
             x = lin(x)
@@ -504,7 +592,7 @@ class GNN_global_node(torch.nn.Module):
 
         #########################################
         ########################################
-        #pre processing
+        #post processing
         for i in range(len(self.post_processing_lin_layers)):
             for node_type in self.node_types:
                 x_dict[node_type] = self.post_processing_batch_norm[i][node_type](self.post_processing_lin_layers[i][node_type](x_dict[node_type]))
