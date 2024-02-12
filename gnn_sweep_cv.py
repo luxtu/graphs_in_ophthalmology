@@ -6,7 +6,7 @@ import json
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, cohen_kappa_score
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
-from models import graph_classifier, hetero_gnn, global_node_gnn, hierarchical_gnn, spatial_pooling_gnn
+from models import graph_classifier, heterogeneous_gnn, random_modality_gnn
 from torch_geometric.loader import DataLoader
 
 from sklearn.metrics import roc_auc_score, roc_curve, auc
@@ -21,22 +21,22 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 # Define sweep config
 sweep_configuration = {
     "method": "random",
-    "name": "Large Layer Num, Fusion at prediction,Skip Conns, Max Features, Random Search 3 Class, CL Stats, Split 5, Eliminated Features, Graph Cleaning, Vessel region stats, Region Intensity Deviations", #  CL Stats, Region Intensity Deviations,
+    "name": "Limited Features, Split 5", #  CL Stats, Region Intensity Deviations,
     "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
-        "batch_size": {"values": [8, 16, 32, 64]},
-        "epochs": {"values": [100]},
+        "batch_size": {"values": [8, 16, 32, 64, 128]},
+        "epochs": {"values": [150]},
         "lr": {"max": 0.01, "min": 0.0001}, # learning rate to high does not work
         "weight_decay": {"max": 0.01, "min": 0.00001},
         "hidden_channels": {"values": [16, 32, 64]}, #[64, 128]
-        "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
-        "num_layers": {"values": [4, 5, 6]}, # , 6, 8, 10,  1,2 
+        "dropout": {"values": [0.1, 0.2, 0.3]}, # 0.2,  more droput looks better # , 0.4
+        "num_layers": {"values": [1, 2, 5, 6]}, # , 6, 8, 10,  1,2 
         "aggregation_mode": {"values": ["mean", "add_max", "max_mean"]},# removed, "add", "max", "add_mean" #  "add" "mean", "add_max", "max_mean", ,"add_mean" # "mean", "add_max", "max_mean"
-        "pre_layers": {"values": [0]}, # less is better here... ,2,4
+        "pre_layers": {"values": [0,1,2]}, # less is better here... ,2,4
         "post_layers": {"values": [1,2,4]},
         "final_layers": {"values": [1,2,4]},
         "batch_norm": {"values": [True, False]},
-        "hetero_conns": {"values": [True]}, # , False
+        "hetero_conns": {"values": [True, False]}, # , False
         "faz_conns": {"values": [True]}, #, False
         "conv_aggr": {"values": ["cat", "sum", "mean"]}, # cat, sum, mean
         "class_weights": {"values": ["balanced"]}, # "balanced", #  # "unbalanced", # , "weak_balanced" 
@@ -46,14 +46,14 @@ sweep_configuration = {
         "activation": {"values": ["relu", "leaky", "elu"]},
         "faz_node": {"values": [True]},
         "split": {"values": [5]},
-        "start_rep": {"values": [False]}, # True, 
+        "start_rep": {"values": [True, False]}, # True, 
         "aggr_faz": {"values": [True, False]},
         "smooth_label_loss": {"values": [True, False]},
         "skip_connection": {"values": [True, False]},
     },
 }
 
-sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class_vessel_region_features")
+sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class_vessel_region_features_late_fusion_SAM")
 # loading data
 
 data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
@@ -167,7 +167,6 @@ seg_size = 1216
 
 cv_pickle_processed = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl" # _dataset_faz_isol_not_removed_more_features_processed_cl.pkl" # _isol_not_removed_more_features
 final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl" # _dataset_faz_isol_not_removed_more_features_processed_cl.pkl" #_isol_not_removed_more_features
-split = 1
 
 import pickle
 #load the pickled datasets
@@ -192,9 +191,24 @@ with open("feature_name_dict_max.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
+# additionally remove extent and eccentricity
 
-eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd", "centroid-0", "centroid-1", "area","extent", "centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "equivalent_diameter", "q10", "q25", "q75", "q90","q95", "intensity_max"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
-                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "intensity_max", "centroid-0", "centroid-1"]}
+included_features = {"graph_1": ["length", "distance", "node2_degree", "area", "perimeter", "avgRadiusAvg", "intensity_mean", "q90", "q10"],
+                      "graph_2":["area", "perimeter", "axis_major_length", "axis_minor_length", "intensity_max",  "intensity_mean", "q25", "q75", "std"]}
+if faz_node_bool:
+    included_features["faz"] = ["area", "perimeter", "axis_major_length", "axis_minor_length", "intensity_max",  "intensity_mean", "q25", "q75", "std"]
+
+# create the eliminate features dict, based on the included features
+eliminate_features = {}
+for key in features_label_dict.keys():
+    eliminate_features[key] = []
+    for feat in features_label_dict[key]:
+        if feat not in included_features[key]:
+            eliminate_features[key].append(feat)
+
+
+#eliminate_features = {"graph_1":["eccentricity", "num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd", "centroid-0", "centroid-1", "area", "extent", "centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "equivalent_diameter", "q10", "q25", "q75", "q90","q95", "intensity_max"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
+#                      "graph_2":["eccentricity", "extent", "centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "intensity_max", "centroid-0", "centroid-1"]}
 
 #eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd"], #"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
 #                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]}
@@ -202,8 +216,8 @@ eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiu
 #eliminate_features = {"graph_1":["maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd", "minRadiusAvg",  "avgRadiusStd", "roundnessStd", "roundnessAvg", "curveness"], 
 #                      "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation", "intensity_max", "centroid-0", "centroid-1", "solidity", "extent", "degree"]}
 
-if faz_node_bool:
-    eliminate_features["faz"] = ["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"] # , "centroid-0", "centroid-1", "solidity", "extent"
+#if faz_node_bool:
+#    eliminate_features["faz"] = ["eccentricity", "extent", "centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"] # , "centroid-0", "centroid-1", "solidity", "extent"
 
 
 # get positions of features to eliminate and remove them from the feature label dict and the graphs
@@ -218,20 +232,13 @@ for key in eliminate_features.keys():
         for data in test_dataset:
             data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
 
-
-# delete all features but the last one
-#for key in eliminate_features.keys():
-#    for data in train_dataset:
-#        data[key].x = data[key].x[:, -1].unsqueeze(1)
-#    for data in val_dataset:
-#        data[key].x = data[key].x[:, -1].unsqueeze(1)
-#    for data in test_dataset:
-#        data[key].x = data[key].x[:, -1].unsqueeze(1)
-
-    
-            
-
-
+# print the feature names
+print("Feature names: Graph 1")
+print(features_label_dict["graph_1"])
+print("Feature names: Graph 2")
+print(features_label_dict["graph_2"])
+print("Feature names: Faz")
+print(features_label_dict["faz"])
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -260,7 +267,7 @@ def main():
     #torch.autograd.set_detect_anomaly(True)
     run = wandb.init()
 
-    model = global_node_gnn.GNN_global_node(hidden_channels= wandb.config.hidden_channels,
+    model = heterogeneous_gnn.Heterogeneous_GNN(hidden_channels= wandb.config.hidden_channels, #random_modality_gnn.Random_Modality_GNN
                                                         out_channels= num_classes,
                                                         num_layers= wandb.config.num_layers, 
                                                         dropout = wandb.config.dropout, 
