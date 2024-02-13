@@ -153,6 +153,26 @@ def create_combined_feature_dict(g_feature_dict, faz_feature_dict, seg_feature_d
     return comb_feature_dict
 
 
+def add_virtual_node(dataset):
+
+    for data in dataset:
+    # add a virtual node that connects to all other nodes, with 0 embeddings
+        data["global"].x = torch.zeros((1, 64)).float()
+        for key in data.x_dict.keys():
+            # connect the virtual node to all other nodes
+
+        
+            data[("global", "to", key)].edge_index = torch.zeros((2, data.x_dict[key].shape[0])).long()
+            data[("global", "to", key)].edge_index[0,:] = 0
+            data[("global", "to", key)].edge_index[1,:] = torch.arange(data.x_dict[key].shape[0])
+
+            data[(key, "rev_to", "global")].edge_index = torch.zeros((2, data.x_dict[key].shape[0])).long()
+            data[(key, "rev_to", "global")].edge_index[0,:] = torch.arange(data.x_dict[key].shape[0])
+            data[(key, "rev_to", "global")].edge_index[1,:] = 0
+
+
+
+
 
 def add_global_node(dataset):
 
