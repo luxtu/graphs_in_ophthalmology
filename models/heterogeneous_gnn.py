@@ -47,12 +47,12 @@ class Heterogeneous_GNN(torch.nn.Module):
             self.node_types = node_types
 
         self.global_node = global_node
-        if self.global_node:
-            self.node_types = self.node_types + ["global"]
+
         
         self.conv_aggr = conv_aggr
         self.hetero_conns = hetero_conns
-
+        if self.global_node and self.hetero_conns and self.faz_node:
+            self.node_types = self.node_types + ["global"]
         self.homogeneous_conv = homogeneous_conv
         self.heterogeneous_conv = heterogeneous_conv
         self.activation = activation
@@ -174,6 +174,7 @@ class Heterogeneous_GNN(torch.nn.Module):
 
 
     def forward(self, x_dict, edge_index_dict, batch_dict, grads = False, **kwargs):
+
 
         if self.start_rep:
 
@@ -319,6 +320,8 @@ class Heterogeneous_GNN(torch.nn.Module):
                     ('global', 'to', 'graph_1'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
                     ('global', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False), #
                     ('global', 'to', 'global'): homogeneous_conv(-1,hidden_channels), 
+                    ('graph_1', 'rev_to', 'global'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+                    ('graph_2', 'rev_to', 'global'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
                 }, aggr=conv_aggr)
             else:
                 conv = HeteroConv({
@@ -344,26 +347,67 @@ class Heterogeneous_GNN(torch.nn.Module):
 
     def conv_123(self, hidden_channels, conv_aggr, homogeneous_conv, heterogeneous_conv):
         if self.hetero_conns and self.faz_conns:
-            conv = HeteroConv({
-                ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
-                ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-                ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                ('graph_1', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                ('faz', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels), 
-                ('faz', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                ('graph_2', 'rev_to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+            if not self.global_node:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_1', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('faz', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels), 
+                    ('faz', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_2', 'rev_to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
 
-            }, aggr=conv_aggr)
+                }, aggr=conv_aggr)
+            else:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_1', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('faz', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels), 
+                    ('faz', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_2', 'rev_to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('global', 'to', 'graph_1'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+                    ('global', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False), #
+                    ('global', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False), #
+                    ('global', 'to', 'global'): homogeneous_conv(-1,hidden_channels), 
+                    ('graph_1', 'rev_to', 'global'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+                    ('graph_2', 'rev_to', 'global'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+                    ('faz', 'rev_to', 'global'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+
+                }, aggr=conv_aggr)
+
+
+
         elif self.hetero_conns and not self.faz_conns:
-            conv = HeteroConv({
-                ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
-                ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-                ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),
-                ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-            }, aggr=conv_aggr)
+            if not self.global_node:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                }, aggr=conv_aggr)
+            else:
+                conv = HeteroConv({
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
+                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),
+                    ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('global', 'to', 'graph_1'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+                    ('global', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False), #
+                    ('global', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False), #
+                    ('global', 'to', 'global'): homogeneous_conv(-1,hidden_channels), 
+                    ('graph_1', 'rev_to', 'global'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+                    ('graph_2', 'rev_to', 'global'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+                    ('faz', 'rev_to', 'global'): heterogeneous_conv((-1,-1), hidden_channels, add_self_loops=False), #
+
+                }, aggr=conv_aggr)
 
         else:
             if self.unused_faz:
