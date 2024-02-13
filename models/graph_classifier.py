@@ -2,8 +2,6 @@ import torch
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from torch.optim.lr_scheduler import ExponentialLR
-from torch.nn import BCEWithLogitsLoss
-from timm.loss import LabelSmoothingCrossEntropy
 
 
 def multi_label_loss(out, y, num_classes, loss_func, device):
@@ -85,21 +83,30 @@ def custom_loss(out_diseased, out_stage, y):
 
 
 class graphClassifierHetero():
-    def __init__(self, model, loss_func, lr = 0.005, weight_decay = 5e-5, smooth_label_loss = False):
+    def __init__(self, model, loss_weights = None, lr = 0.005, weight_decay = 5e-5, smooth_label_loss = False):
 
         self.model = model
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.epoch = 0
         
         self.model.to(self.device)
+        self.sam = True
+        
         #self.optimizer= torch.optim.Adam(self.model.parameters(), lr= lr, weight_decay= weight_decay) # usually adamW
-
-        base_optimizer = torch.optim.Adam  # define an optimizer for the "sharpness-aware" update
-        self.optimizer = SAM(self.model.parameters(), base_optimizer, lr=lr, weight_decay = weight_decay) # , momentum=0.9    # , weight_decay = weight_decay
-
         #self.optimizer = torch.optim.Adam(self.model.parameters(), lr= lr)
         #self.optimizer = torch.optim.SGD(self.model.parameters(), lr= lr, momentum=0.9)
+        if self.sam:
+            base_optimizer = torch.optim.AdamW  # define an optimizer for the "sharpness-aware" update
+            self.optimizer = SAM(self.model.parameters(), base_optimizer, lr=lr, weight_decay = weight_decay, rho= 0.5) # , momentum=0.9  
+        else:
+            self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr, weight_decay= weight_decay)
+
+
         self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
-        self.lossFunc = loss_func
+        if smooth_label_loss:
+            self.lossFunc = torch.nn.CrossEntropyLoss(weight=loss_weights, label_smoothing=0.1)
+        else:
+            self.lossFunc = torch.nn.CrossEntropyLoss(weight=loss_weights)
         self.smooth_label_loss = smooth_label_loss
 
     def train(self, loader, data_loss_dict = None):
@@ -117,57 +124,25 @@ class graphClassifierHetero():
             #print(data.y)
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
-            #out_dis, out_stage = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression)  # Perform a single forward pass.
-            #out =  self.model(data.x_dict, data.edge_index_dict, data.batch_dict, regression =self.regression, pos_dict = pos_dict)  # Perform a single forward pass. #  pos_dict = pos_dict, 
-
-            # get the number of classes from the output
-            #num_classes = out.shape[1]
-
-            #if self.smooth_label_loss:
-            #    loss = smoothed_label_loss(out, data.y, num_classes, self.lossFunc, self.device) # LabelSmoothingCrossEntropy(0.1)(out, data.y)
-            #    #
-            #else:
-            #    #loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
-            #    loss = self.lossFunc(out, data.y)
-#
-            ##loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
-            #self.optimizer.zero_grad()  # Clear gradients.
-            #loss.backward()  # Derive gradients.
-            #self.optimizer.step()  # Update parameters based on gradients.
-            #cum_loss += loss.item()
-                
-
-            ##########################################################
-            ##########################################################
-            idx = torch.randint(0, len(self.model.aggr_keys), (1,))
-            enable_running_stats(self.model)
-            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, idx = idx)
-            num_classes = out.shape[1]
-            if self.smooth_label_loss:
-                loss = smoothed_label_loss(out, data.y, num_classes, self.lossFunc, self.device) # LabelSmoothingCrossEntropy(0.1)(out, data.y)
+            idx = torch.randint(0, len(self.model.aggr_keys), (1,)) # idx is only relevant for the random modality gnn
+            if self.sam:
+                enable_running_stats(self.model)
             else:
-                #loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
-                loss = self.lossFunc(out, data.y)
+                self.optimizer.zero_grad()  # Clear gradients.
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, idx = idx) 
+            loss = self.lossFunc(out, data.y)
+            loss.backward()  # Derive gradients.
 
-            loss.backward()
-            self.optimizer.first_step(zero_grad=True)
-            # get the loss value for the stats
-
-            # second forward-backward pass
-            disable_running_stats(self.model)
-            if self.smooth_label_loss:
-                smoothed_label_loss(self.model(data.x_dict, data.edge_index_dict, data.batch_dict, idx = idx), data.y, num_classes, self.lossFunc, self.device).backward() # LabelSmoothingCrossEntropy(0.1)(out, data.y)
-                #
-            else:
-                #loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+            if self.sam:
+                # two steps for sam optimizer
+                self.optimizer.first_step(zero_grad=True)
+                disable_running_stats(self.model)
                 self.lossFunc(self.model(data.x_dict, data.edge_index_dict, data.batch_dict, idx = idx), data.y).backward()
-            self.optimizer.second_step(zero_grad=True)
-
+                self.optimizer.second_step(zero_grad=True)
+            else:
+                # single step for adam optimizer
+                self.optimizer.step()
             cum_loss += loss.item()
-            ##########################################################
-            ##########################################################
-
-
 
             # get graph_ids 
             ids = data.graph_id
@@ -179,11 +154,13 @@ class graphClassifierHetero():
 
             raw_out.append(out.cpu().detach().numpy())
             y_out.append(data.y.cpu().detach().numpy())
+
         
         #raw_out)
         pred = np.concatenate(raw_out, axis = 0)
         y = np.concatenate(y_out, axis = 0)
         self.scheduler.step()
+        self.epoch += 1
         return cum_loss/size_data_set, pred, y, data_loss_dict
 
 
@@ -225,31 +202,9 @@ class graphClassifierHetero():
             pos_dict = {}
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
-            #out_1, out_2 = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression)
+                
             out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict)
-            #out_1 = out_1.squeeze(1)
-            #out_2 = out_2.squeeze(1)
-            #print(out_1)
-            #print(out_2)
 
-            #out = torch.zeros_like(out_1)
-
-            #out[out_1>0] = 1
-            #out[out_2>0] = 2
-
-            #out[out_1<=0] = 0
-            #if self.regression:
-            #    # assign classes according to thresholds
-            #    out = out.squeeze()
-            #    out[out<0.5] = 0
-            #    out[(out>=0.5) & (out<1.5)] = 1
-            #    out[out>=1.5] = 2
-            #    out = out.int()
-#
-            ## concatenate the raw output
-            #else:
-            #    
-#
             raw_out.append(out.cpu().detach().numpy())
             y_out.append(data.y.cpu().detach().numpy())
         
@@ -468,7 +423,6 @@ class SAM(torch.optim.Optimizer):
         self.base_optimizer.param_groups = self.param_groups
 
 import torch
-import torch.nn as nn
 from torch.nn.modules.batchnorm import _BatchNorm
 
 
@@ -486,3 +440,4 @@ def enable_running_stats(model):
             module.momentum = module.backup_momentum
 
     model.apply(_enable)
+
