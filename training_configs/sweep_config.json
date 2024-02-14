@@ -72,7 +72,7 @@
         "values": [true]
       },
       "split": {
-        "values": [1]
+        "values": [1, 2, 3, 4, 5]
       },
       "start_rep": {
         "values": [true, false]
@@ -88,6 +88,9 @@
       },
       "global_node": {
         "values": [false]
+      },
+      "SAM": {
+        "values": [true]
       }
     }
   }

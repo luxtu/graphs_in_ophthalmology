@@ -16,13 +16,12 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
 # loading the sweep configuration and starting the sweep
 #################################
-with open('training_configs/sweep_config_single.json', 'r') as file:
+with open('training_configs/sweep_config.json', 'r') as file:
     sweep_configuration = json.load(file)
 sweep_configuration["method"] = "random"
-sweep_configuration["name"] = "sweep_name SAM rf important features"
+sweep_configuration["name"] = "SAM no global, all splits"
 sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class_vessel_region_features_SAM_all_features")
-# set the desired split
-sweep_configuration["parameters"]["splits"]["values"] = [1]
+
 
 
 # loading the dataset
@@ -129,7 +128,7 @@ def main():
     test_loader = DataLoader(test_dataset, batch_size = 128, shuffle=False)
 
 
-    classifier = graph_classifier.graphClassifierHetero(model, loss_weights_dict[wandb.config.class_weights], lr = wandb.config.lr, weight_decay =wandb.config.weight_decay, smooth_label_loss = wandb.config.smooth_label_loss) 
+    classifier = graph_classifier.graphClassifierHetero(model, loss_weights_dict[wandb.config.class_weights], lr = wandb.config.lr, weight_decay =wandb.config.weight_decay, smooth_label_loss = wandb.config.smooth_label_loss, SAM_opt= wandb.config.SAM) 
 
     best_val_bal_acc = 0
     best_mean_auc = 0

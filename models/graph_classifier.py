@@ -83,26 +83,25 @@ def custom_loss(out_diseased, out_stage, y):
 
 
 class graphClassifierHetero():
-    def __init__(self, model, loss_weights = None, lr = 0.005, weight_decay = 5e-5, smooth_label_loss = False):
+    def __init__(self, model, loss_weights = None, lr = 0.005, weight_decay = 5e-5, smooth_label_loss = False, SAM_opt = False):
 
         self.model = model
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.epoch = 0
         
         self.model.to(self.device)
-        self.sam = True
+        self.SAM_opt = SAM_opt
         
         #self.optimizer= torch.optim.Adam(self.model.parameters(), lr= lr, weight_decay= weight_decay) # usually adamW
         #self.optimizer = torch.optim.Adam(self.model.parameters(), lr= lr)
         #self.optimizer = torch.optim.SGD(self.model.parameters(), lr= lr, momentum=0.9)
-        if self.sam:
+        if self.SAM_opt:
             base_optimizer = torch.optim.AdamW  # define an optimizer for the "sharpness-aware" update
-            self.optimizer = SAM(self.model.parameters(), base_optimizer, lr=lr, weight_decay = weight_decay, rho= 0.5) # , momentum=0.9  
+            self.optimizer = SAM(self.model.parameters(), base_optimizer, lr=lr, weight_decay = weight_decay, rho= 0.05) # , momentum=0.9  
+            self.scheduler = ExponentialLR(self.optimizer.base_optimizer, gamma=0.95)
         else:
             self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr, weight_decay= weight_decay)
-
-
-        self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
+            self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
         if smooth_label_loss:
             self.lossFunc = torch.nn.CrossEntropyLoss(weight=loss_weights, label_smoothing=0.1)
         else:
@@ -125,7 +124,7 @@ class graphClassifierHetero():
             for key in ["graph_1", "graph_2"]:
                 pos_dict[key] = data[key].pos
             idx = torch.randint(0, len(self.model.aggr_keys), (1,)) # idx is only relevant for the random modality gnn
-            if self.sam:
+            if self.SAM_opt:
                 enable_running_stats(self.model)
             else:
                 self.optimizer.zero_grad()  # Clear gradients.
@@ -133,7 +132,7 @@ class graphClassifierHetero():
             loss = self.lossFunc(out, data.y)
             loss.backward()  # Derive gradients.
 
-            if self.sam:
+            if self.SAM_opt:
                 # two steps for sam optimizer
                 self.optimizer.first_step(zero_grad=True)
                 disable_running_stats(self.model)

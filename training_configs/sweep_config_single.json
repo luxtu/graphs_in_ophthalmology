@@ -86,6 +86,9 @@
       },
       "global_node": {
         "values": [false]
+      },
+      "SAM": {
+        "values": [true]
       }
     }
   }
