@@ -7,51 +7,49 @@
     },
     "parameters": {
       "batch_size": {
-        "values": [8, 16, 32, 64]
+        "values": [16]
       },
       "epochs": {
         "values": [150]
       },
       "lr": {
-        "max": 0.01,
-        "min": 0.0001
+        "values": [0.0010]
       },
       "weight_decay": {
-        "max": 0.01,
-        "min": 0.00001
+        "values": [0.004178]
       },
       "hidden_channels": {
-        "values": [16, 32, 64]
+        "values": [64]
       },
       "dropout": {
-        "values": [0, 0.1, 0.2, 0.3]
+        "values": [0.3]
       },
       "num_layers": {
-        "values": [1, 2, 5, 6]
+        "values": [1]
       },
       "aggregation_mode": {
-        "values": ["max", "mean", "max_mean"]
+        "values": ["max_mean"]
       },
       "pre_layers": {
-        "values": [0, 1, 2]
+        "values": [2]
       },
       "post_layers": {
-        "values": [1, 2, 4]
+        "values": [1]
       },
       "final_layers": {
-        "values": [1, 2, 4]
+        "values": [4]
       },
       "batch_norm": {
-        "values": [true, false]
+        "values": [true]
       },
       "hetero_conns": {
-        "values": [true, false]
+        "values": [true]
       },
       "faz_conns": {
         "values": [true]
       },
       "conv_aggr": {
-        "values": ["cat", "sum", "mean"]
+        "values": ["sum"]
       },
       "class_weights": {
         "values": ["balanced"]
@@ -63,28 +61,28 @@
         "values": ["sage"]
       },
       "heterogeneous_conv": {
-        "values": ["gat", "sage"]
+        "values": ["sage"]
       },
       "activation": {
-        "values": ["relu", "leaky", "elu"]
+        "values": ["leaky"]
       },
       "faz_node": {
         "values": [true]
       },
       "split": {
-        "values": [1, 2, 3, 4, 5]
+        "values": [1,2,3,4,5]
       },
       "start_rep": {
-        "values": [true, false]
+        "values": [false]
       },
       "aggr_faz": {
-        "values": [true, false]
+        "values": [false]
       },
       "smooth_label_loss": {
-        "values": [true, false]
+        "values": [true]
       },
       "skip_connection": {
-        "values": [true, false]
+        "values": [true]
       },
       "global_node": {
         "values": [false]

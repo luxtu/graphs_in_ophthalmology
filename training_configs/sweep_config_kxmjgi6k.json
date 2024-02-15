@@ -7,40 +7,40 @@
     },
     "parameters": {
       "batch_size": {
-        "values": [64]
+        "values": [16]
       },
       "epochs": {
         "values": [150]
       },
       "lr": {
-        "values": [0.001]
+        "values": [0.0011852840477255145]
       },
       "weight_decay": {
-        "values": [0.001]
+        "values": [0.009932412056175732]
       },
       "hidden_channels": {
-        "values": [32]
+        "values": [64]
       },
       "dropout": {
         "values": [0.1]
       },
       "num_layers": {
-        "values": [2]
+        "values": [5]
       },
       "aggregation_mode": {
         "values": ["max_mean"]
       },
       "pre_layers": {
-        "values": [1]
+        "values": [2]
       },
       "post_layers": {
-        "values": [2]
+        "values": [4]
       },
       "final_layers": {
-        "values": [2]
+        "values": [4]
       },
       "batch_norm": {
-        "values": [true]
+        "values": [false]
       },
       "hetero_conns": {
         "values": [true]
@@ -64,19 +64,19 @@
         "values": ["sage"]
       },
       "activation": {
-        "values": [ "leaky"]
+        "values": [ "relu"]
       },
       "faz_node": {
         "values": [true]
       },
       "split": {
-        "values": [1]
+        "values": [1,2,3,4,5]
       },
       "start_rep": {
         "values": [false]
       },
       "aggr_faz": {
-        "values": [true]
+        "values": [false]
       },
       "smooth_label_loss": {
         "values": [true]
@@ -89,6 +89,9 @@
       },
       "SAM": {
         "values": [true]
+      },
+      "aggr_scheme": {
+        "values": ["mean", "max", "sum", "lstm","std", ["mean", "max"], ["mean", "std"]]
       }
     }
   }
