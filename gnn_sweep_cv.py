@@ -8,7 +8,6 @@ from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_poo
 from models import graph_classifier, heterogeneous_gnn, random_modality_gnn
 from torch_geometric.loader import DataLoader
 
-from sklearn.metrics import roc_auc_score, roc_curve, auc
 from utils import dataprep_utils, train_utils
 import wandb
 from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
@@ -16,10 +15,10 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
 # loading the sweep configuration and starting the sweep
 #################################
-with open('training_configs/sweep_config.json', 'r') as file:
+with open('training_configs/sweep_config_small.json', 'r') as file:
     sweep_configuration = json.load(file)
 sweep_configuration["method"] = "random"
-sweep_configuration["name"] = "SAM no global, all splits"
+sweep_configuration["name"] = "SAM, all splits, small retrain, rf + corr features, aggr schemes also for hetero"
 sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class_vessel_region_features_SAM_all_features")
 
 
@@ -49,7 +48,7 @@ train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(
 with open("training_configs/feature_name_dict_max.json", "r") as file:
     label_dict_full = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
-with open('training_configs/included_features_rf_importance.json', 'r') as file:
+with open('training_configs/included_features_rf_importance_corr_98.json', 'r') as file:
     included_features = json.load(file)
 # remove faz key if faz node is not used
 if not faz_node_bool:
@@ -166,4 +165,4 @@ def main():
 
     wandb.log({"roc": wandb.plot.roc_curve(y_true_val, best_pred, labels = label_names)})
 
-wandb.agent(sweep_id, function=main, count=50)
+wandb.agent(sweep_id, function=main, count=1000)
