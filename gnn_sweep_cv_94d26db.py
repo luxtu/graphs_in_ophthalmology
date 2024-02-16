@@ -35,8 +35,8 @@ mode_cv = "cv"
 mode_final_test = "final_test"
 
 # adjust the dataset for the split
-cv_pickle_processed = f"../data/{data_type}_{mode_cv}_selected_sweep_repeat.pkl"
-final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_selected_sweep_repeat.pkl" 
+cv_pickle_processed = f"../data/{data_type}_{mode_cv}_selected_sweep_repeat_v2.pkl"
+final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_selected_sweep_repeat_v2.pkl" 
 
 
 import pickle
