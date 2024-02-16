@@ -1,0 +1,85 @@
+{
+    "method": "random",
+    "name": "Best Settings Repeat Trial",
+    "metric": {
+      "goal": "maximize",
+      "name": "best_val_bal_acc"
+    },
+    "parameters": {
+      "batch_size": {
+        "values": [32]
+      },
+      "epochs": {
+        "values": [100]
+      },
+      "lr": {
+        "values": [0.009027]
+      },
+      "weight_decay": {
+        "values": [0.004087]
+      },
+      "hidden_channels": {
+        "values": [64]
+      },
+      "dropout": {
+        "values": [0.4]
+      },
+      "num_layers": {
+        "values": [2]
+      },
+      "aggregation_mode": {
+        "values": ["max_mean"]
+      },
+      "pre_layers": {
+        "values": [4]
+      },
+      "post_layers": {
+        "values": [2]
+      },
+      "final_layers": {
+        "values": [4]
+      },
+      "batch_norm": {
+        "values": [true]
+      },
+      "hetero_conns": {
+        "values": [true, false]
+      },
+      "faz_conns": {
+        "values": [true]
+      },
+      "conv_aggr": {
+        "values": ["sum"]
+      },
+      "class_weights": {
+        "values": ["balanced"]
+      },
+      "dataset": {
+        "values": ["DCP"]
+      },
+      "homogeneous_conv": {
+        "values": ["sage"]
+      },
+      "heterogeneous_conv": {
+        "values": ["sage"]
+      },
+      "activation": {
+        "values": ["leaky"]
+      },
+      "faz_node": {
+        "values": [true]
+      },
+      "split": {
+        "values": [1,2,3,4,5]
+      },
+      "start_rep": {
+        "values": [false]
+      },
+      "aggr_faz": {
+        "values": [false]
+      },
+      "smooth_label_loss": {
+        "values": [false]
+      }
+    }
+  }

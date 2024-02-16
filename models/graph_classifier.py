@@ -440,3 +440,119 @@ def enable_running_stats(model):
 
     model.apply(_enable)
 
+
+
+
+class graphClassifierHetero_94d26db():
+    def __init__(self, model, loss_func, lr = 0.005, weight_decay = 5e-5, regression = False, smooth_label_loss = False):
+
+        self.model = model
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        
+        self.model.to(self.device)
+        self.optimizer= torch.optim.AdamW(self.model.parameters(), lr= lr, weight_decay= weight_decay)
+        self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
+        self.lossFunc = loss_func
+        self.regression = regression
+        self.smooth_label_loss = smooth_label_loss
+
+    def train(self, loader, data_loss_dict = None):
+        self.model.train()
+        cum_loss = 0
+        raw_out = []
+        y_out = []
+        if data_loss_dict is None:
+            data_loss_dict = {}
+
+        size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
+        for data in loader:
+            #data.to(self.device)
+            pos_dict = {}
+            #print(data.y)
+            for key in ["graph_1", "graph_2"]:
+                pos_dict[key] = data[key].pos
+            out =  self.model(data.x_dict, data.edge_index_dict, data.batch_dict, regression =self.regression, pos_dict = pos_dict)  # Perform a single forward pass. #  pos_dict = pos_dict, 
+            #print(out.shape)
+            #print(data.y.shape)
+
+            # get the number of classes from the output
+            num_classes = out.shape[1]
+
+            if self.smooth_label_loss:
+                loss = smoothed_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+            else:
+                #loss = multi_label_loss(out, data.y, num_classes, self.lossFunc, self.device)
+                loss = self.lossFunc(out, data.y)
+
+            #loss = custom_loss(out_dis, out_stage, data.y)#.backward()  # Derive gradients.
+            loss.backward()  # Derive gradients.
+            self.optimizer.step()  # Update parameters based on gradients.
+            self.optimizer.zero_grad()  # Clear gradients.
+            cum_loss += loss.item()
+
+
+            # get graph_ids 
+            ids = data.graph_id
+            for id in ids:
+                if id not in data_loss_dict:
+                    data_loss_dict[id] = 0
+                data_loss_dict[id]+= loss.item()
+
+
+            raw_out.append(out.cpu().detach().numpy())
+            y_out.append(data.y.cpu().detach().numpy())
+        
+        #raw_out)
+        pred = np.concatenate(raw_out, axis = 0)
+        y = np.concatenate(y_out, axis = 0)
+        self.scheduler.step()
+        return cum_loss/size_data_set, pred, y, data_loss_dict
+
+
+    @torch.no_grad()
+    def test(self, loader):
+        self.model.eval()
+        correct = 0
+        size_data_set = len(loader.dataset) # must be done before iterating/regenerating the dataset
+        for data in loader:  # Iterate in batches over the training/test dataset.
+            data.to(self.device)
+            pos_dict = {}
+            for key in ["graph_1", "graph_2"]:
+                pos_dict[key] = data[key].pos
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression) 
+
+            if self.regression:
+                # assign classes according to thresholds
+                out = out.squeeze()
+                out[out<0.5] = 0
+                out[(out>=0.5) & (out<1.5)] = 1
+                out[out>=1.5] = 2 # ) & (out<2.5)
+
+                # convert to int
+                pred = out.int()
+
+            else: 
+                pred = out.argmax(dim=1)  # Use the class with highest probability. 
+            correct += int((pred == data.y).sum())  # Check against ground-truth labels.
+        return correct / size_data_set  # Derive ratio of correct predictions.
+
+    @torch.no_grad()
+    def predict(self, loader):
+
+        raw_out = []
+        y_out = []
+        self.model.eval()
+        for data in loader:  # Iterate in batches over the training/test dataset.
+            data.to(self.device)
+            pos_dict = {}
+            for key in ["graph_1", "graph_2"]:
+                pos_dict[key] = data[key].pos
+            out = self.model(data.x_dict, data.edge_index_dict, data.batch_dict, pos_dict = pos_dict, regression =self.regression)
+            raw_out.append(out.cpu().detach().numpy())
+            y_out.append(data.y.cpu().detach().numpy())
+        
+        #raw_out)
+        pred = np.concatenate(raw_out, axis = 0)
+        y = np.concatenate(y_out, axis = 0)
+
+        return pred, y 
