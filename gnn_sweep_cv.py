@@ -15,11 +15,11 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
 # loading the sweep configuration and starting the sweep
 #################################
-with open('training_configs/sweep_config_small.json', 'r') as file:
+with open('training_configs/sweep_config.json', 'r') as file:
     sweep_configuration = json.load(file)
 sweep_configuration["method"] = "random"
-sweep_configuration["name"] = "SAM, all splits, small retrain, rf + corr features, aggr schemes also for hetero"
-sweep_id = wandb.sweep(sweep=sweep_configuration, project= "gnn_cv_3_class_vessel_region_features_SAM_all_features")
+sweep_configuration["name"] = "SAM, all splits,  rf + corr features, aggr schemes, fixed region features"
+sweep_id = wandb.sweep(sweep=sweep_configuration, project= "fixed vessel region, no <0 del")
 
 
 
@@ -30,8 +30,10 @@ faz_node_bool = sweep_configuration["parameters"]["faz_node"]["values"][0]
 label_names = ["Healthy/DM", "NPDR", "PDR"]
 mode_cv = "cv"
 mode_final_test = "final_test"
-cv_pickle_processed = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl" 
-final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl"
+#cv_pickle_processed = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl" 
+#final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl"
+cv_pickle_processed = f"../data/{data_type}_{mode_cv}_region_vessels_no_del_smaller0.pkl"
+final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_region_vessels_no_del_smaller0.pkl" 
 with open(cv_pickle_processed, "rb") as file:
     cv_dataset = pickle.load(file)
 with open(final_test_pickle_processed, "rb") as file:
@@ -130,6 +132,7 @@ def main():
     classifier = graph_classifier.graphClassifierHetero(model, loss_weights_dict[wandb.config.class_weights], lr = wandb.config.lr, weight_decay =wandb.config.weight_decay, smooth_label_loss = wandb.config.smooth_label_loss, SAM_opt= wandb.config.SAM) 
 
     best_val_bal_acc = 0
+    test_bal_acc_best_val = 0
     best_mean_auc = 0
     best_pred = None
     for epoch in range(1, wandb.config.epochs + 1):
@@ -147,6 +150,7 @@ def main():
 
         if res_dict["val_bal_acc"] > best_val_bal_acc and res_dict["train_bal_acc"] > 0.65: # only update if the training accuracy is high enough, is now not really best val bac anymore, but best val bac with high enough train acc
             best_val_bal_acc = res_dict["val_bal_acc"]
+            test_bal_acc_best_val = res_dict["test_bal_acc"]
             if best_val_bal_acc > 0.65:
                 torch.save(classifier.model.state_dict(), f"checkpoints/{wandb.config.dataset}_model_{wandb.config.split}_faz_node_{wandb.config.faz_node}_{run.id}.pt")
                 print("#"*20)
@@ -161,6 +165,7 @@ def main():
             best_pred = y_pred_softmax_val
 
         res_dict["best_val_bal_acc"]= best_val_bal_acc
+        res_dict["test_bal_acc_best_val"]= test_bal_acc_best_val
         wandb.log(res_dict)
 
     wandb.log({"roc": wandb.plot.roc_curve(y_true_val, best_pred, labels = label_names)})

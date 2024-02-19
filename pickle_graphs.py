@@ -86,8 +86,8 @@ json_path = f"../data/{data_type}_json"
 seg_folder = f"../data/{data_type}_seg"
 seg_size = 1216
 
-cv_dataset_cl = prep.add_centerline_statistics_multi(cv_dataset, image_path, json_path, seg_size)
-final_test_dataset_cl = prep.add_centerline_statistics_multi(final_test_dataset, image_path, json_path, seg_size)
+#cv_dataset_cl = prep.add_centerline_statistics_multi(cv_dataset, image_path, json_path, seg_size)
+#final_test_dataset_cl = prep.add_centerline_statistics_multi(final_test_dataset, image_path, json_path, seg_size)
 cv_dataset_cl = prep.add_vessel_region_statistics_multi(cv_dataset, image_path, json_path, seg_folder)
 final_test_dataset_cl = prep.add_vessel_region_statistics_multi(final_test_dataset, image_path, json_path, seg_folder)
 
@@ -102,8 +102,8 @@ final_test_dataset_dict = dict(zip([graph.graph_id for graph in final_test_datas
 cv_dataset.hetero_graphs = cv_dataset_dict
 final_test_dataset.hetero_graphs = final_test_dataset_dict
 
-cv_pickle_processed = f"../data/{data_type}_{mode_cv}_name.pkl"
-final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_name.pkl" 
+cv_pickle_processed = f"../data/{data_type}_{mode_cv}_region_vessels_no_del_smaller0.pkl"
+final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_region_vessels_no_del_smaller0.pkl" 
 
 
 

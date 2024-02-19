@@ -27,10 +27,11 @@ class Heterogeneous_GNN(torch.nn.Module):
                  aggr_faz = False,
                  faz_conns = True,
                  skip_connection = True,
+                 aggr_scheme = "mean",
                  ):
         super().__init__()
         #torch.manual_seed(1234567)
-
+        self.aggr_scheme = aggr_scheme
         self.skip_connection = skip_connection
         self.faz_conns = faz_conns
         self.hidden_channels = hidden_channels
@@ -154,22 +155,6 @@ class Heterogeneous_GNN(torch.nn.Module):
             self.convs.append(conv)
             if self.conv_aggr == "cat":
                 self.cat_comps.append(HeteroDictLinear(-1, hidden_channels, types= self.node_types))
-
-
-
-        ################################## late fusion
-        self.final_layers_node_types = torch.nn.ModuleList()
-        for i in range(len(self.aggr_keys)):
-            final_lin_layers = torch.nn.ModuleList()
-            for j in range(self.num_final_lin_layers):
-                if j == 0:
-                    final_lin_layers.append(Linear(-1, hidden_channels))
-                elif j == self.num_final_lin_layers - 1:
-                    final_lin_layers.append(Linear(hidden_channels, out_channels))
-                else:
-                    final_lin_layers.append(Linear(hidden_channels, hidden_channels))
-            self.final_layers_node_types.append(final_lin_layers)
-
 
 
 
@@ -349,15 +334,15 @@ class Heterogeneous_GNN(torch.nn.Module):
         if self.hetero_conns and self.faz_conns:
             if not self.global_node:
                 conv = HeteroConv({
-                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
-                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-                    ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                    ('graph_1', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                    ('faz', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                    ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels), 
-                    ('faz', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
-                    ('graph_2', 'rev_to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False),
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels, aggr = self.aggr_scheme),
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels, aggr = self.aggr_scheme),
+                    ('graph_1', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False, aggr = self.aggr_scheme),
+                    ('graph_1', 'to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False, aggr = self.aggr_scheme),
+                    ('faz', 'to', 'graph_2'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False, aggr = self.aggr_scheme),
+                    ('graph_2', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False, aggr = self.aggr_scheme),
+                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels, aggr = self.aggr_scheme, ), 
+                    ('faz', 'rev_to', 'graph_1'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False, aggr = self.aggr_scheme),
+                    ('graph_2', 'rev_to', 'faz'): heterogeneous_conv((-1, -1), hidden_channels, add_self_loops=False, aggr = self.aggr_scheme),
 
                 }, aggr=conv_aggr)
             else:
@@ -417,9 +402,9 @@ class Heterogeneous_GNN(torch.nn.Module):
                 }, aggr=conv_aggr)
             else:
                 conv = HeteroConv({
-                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels),
-                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels),
-                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels),  
+                    ('graph_1', 'to', 'graph_1'): homogeneous_conv(-1, hidden_channels, aggr = self.aggr_scheme),
+                    ('graph_2', 'to', 'graph_2'): homogeneous_conv(-1, hidden_channels, aggr = self.aggr_scheme),
+                    ('faz', 'to', 'faz'): homogeneous_conv(-1, hidden_channels, aggr = self.aggr_scheme),  
                 }, aggr=conv_aggr)
 
 

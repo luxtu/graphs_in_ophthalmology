@@ -263,8 +263,9 @@ def heter_graph_cleanup_singel_data(data):
 
         if key == "graph_1":
             # if a node has feature values <0, then remove it
-            idx = torch.where(data.x_dict[key] < 0)[0]
-            del_nodes = torch.cat([del_nodes, idx], dim=0)
+            #idx = torch.where(data.x_dict[key] < 0)[0]
+            pass
+            #del_nodes = torch.cat([del_nodes, idx], dim=0)
         elif key == "graph_2":
             # if the 3rd feature is <10, then remove it
             idx = torch.where(data.x_dict[key][:,2] <= 10)[0]
