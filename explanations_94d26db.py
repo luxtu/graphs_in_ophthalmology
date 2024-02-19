@@ -16,7 +16,7 @@ from explainability import torch_geom_explanation, explanation_in_raw_data, base
 
 
 
-check_point_folder = "../data/test_checkpoints" # test_checkpoints
+check_point_folder = "../data/checkpoints_94d26db_split2_retrain" #test_checkpoints" # test_checkpoints
 
 # extract the files with .pt extension
 check_point_files = [f for f in os.listdir(check_point_folder) if f.endswith(".pt")]
@@ -49,7 +49,7 @@ df_metrics = pd.DataFrame()
 
 # select the checkpoint file with run id 5d3llji3 # nwjxejqg
 #p94pkq2c
-run_id = "14d0c0l2" # ""kxmjgi6k" # "5ughh17h" # "14d0c0l2" #"ig9zvma3" # "14d0c0l2"
+run_id = "zng1r2l7" # "14d0c0l2" # ""kxmjgi6k" # "5ughh17h" # "14d0c0l2" #"ig9zvma3" # "14d0c0l2"
 chekpoint_file = [f for f in check_point_files if run_id in f][0]
 for json_file in json_files:
     if run_id in json_file:
@@ -86,9 +86,10 @@ split = sweep_configuration["split"]
 print(split)
 
 # print the state dict
-#print(state_dict.keys())
+print(state_dict.keys())
 ## delte all key and values that contain "faz"
 if not sweep_configuration["parameters"]["faz_node"] or (not sweep_configuration["parameters"]["aggr_faz"] and not sweep_configuration["parameters"]["hetero_conns"] and not sweep_configuration["parameters"]["start_rep"]):
+    print("Deleting FAZ")
     state_dict = {k: v for k, v in state_dict.items() if "faz" not in k}
 
 #state_dict = {k: v for k, v in state_dict.items() if "faz" not in k}
@@ -142,21 +143,35 @@ for key in eliminate_features.keys():
     
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# weigthings for imbalanced classes 
+
+test_dataset.to(device)
 irrelevant_loss = torch.nn.CrossEntropyLoss()
-clf = graph_classifier.graphClassifierHetero(model, torch.tensor([0.,0.,0.], device= device)) 
+clf = graph_classifier.graphClassifierHetero_94d26db(model, irrelevant_loss, smooth_label_loss = True) 
+#clf = graph_classifier.graphClassifierHetero(model, torch.tensor([0.,0.,0.], device= device)) 
 test_loader_set = DataLoader(test_dataset[:4], batch_size = 4, shuffle=False)
 test_loader_full = DataLoader(test_dataset, batch_size = 64, shuffle=False)
 # must run on an input to set the parameters
 
 # print the state dict of the model
-print(clf.model)
+#print(clf.model)
 print(state_dict.keys())
 
 
 print(train_dataset[0])
 
+# there is a key mismatch between the state dict and the model
+# here the layer has the name "convs.0.convs.<graph_1___to___graph_1>.bias" but in the model it is "convs.0.convs.<graph_1___to___graph_1>.lin_l.bias"
+# change the state dict to match the model
+# iterate through the state dict and change the keys
+print(state_dict["convs.0.convs.<graph_1___to___graph_1>.lin_l.weight"])
+print(state_dict["convs.0.convs.<graph_1___to___graph_1>.lin_r.weight"])
+
+
+
 # load the state dict
-clf.predict(test_loader_set)
+#clf.predict(test_loader_set)
+loss, y_prob_train, y_true_train, _  = clf.train(test_loader_full)
 clf.model.load_state_dict(state_dict)
 y_prob_test, y_test = clf.predict(test_loader_full)
 # create the lookup tree for the integrated gradients baseline
@@ -173,7 +188,7 @@ gnnexp_loader = DataLoader(val_dataset, batch_size = 1, shuffle=False)
 lookup_tree = baseline_lookup.Baseline_Lookup([train_dataset], node_types, device = device)
 
 
-save_path = "../data/explain_94d26db"
+save_path = "../data/explain_94d26db/" + run_id
 
 for idx, data in enumerate(gnnexp_loader):
     data = data.to(device)
@@ -248,13 +263,13 @@ for idx, data in enumerate(gnnexp_loader):
     # for GNN Explainer forces sparsity, thres
     threshold = "adaptive"
     importance_threshold_path = f'{save_path}/feature_importance/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_{threshold}_quantile_attributes_new.png'
-    #torch_geom_explanation.visualize_feature_importance(explanation,data,  importance_threshold_path, features_label_dict, explained_gradient= 0.8) # means all of the gradient is explained
+    torch_geom_explanation.visualize_feature_importance(explanation,data,  importance_threshold_path, features_label_dict, explained_gradient= 0.8) # means all of the gradient is explained
     #without threshold
     importance_path = f'{save_path}/feature_importance/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_no_threshold_quantile_attributes_new.png'
-    #torch_geom_explanation.visualize_feature_importance(explanation,data, importance_path, features_label_dict, explained_gradient= None)
+    torch_geom_explanation.visualize_feature_importance(explanation,data, importance_path, features_label_dict, explained_gradient= None)
     #torch_geom_explanation.visualize_relevant_subgraph(explanation, data, f"{save_path}/subgraph_{data_label}_{explain_type}_{run_id}_attributes.png", threshold = "adaptive", edge_threshold = "node_threshold", edges = edges, faz_node= faz_node_bool) #"adaptive"
     #graph_2D.HeteroGraphPlotter2D().plot_graph_2D_faz(data, edges= True, path = f"{save_path}/fullgraph/fullgraph_{data_label}_{explain_type}.png")
-    #torch_geom_explanation.visualize_node_importance_histogram(explanation, f"{save_path}/histogram/node_hist_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes_new.png", faz_node= faz_node_bool)
+    torch_geom_explanation.visualize_node_importance_histogram(explanation, f"{save_path}/histogram/node_hist_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes_new.png", faz_node= faz_node_bool)
 
     #torch_geom_explanation.store_relevant_nodes_csv(explanation, data,  f"{save_path}/csv_out/", features_label_dict , faz_node=faz_node_bool)
 
