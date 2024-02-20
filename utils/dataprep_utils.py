@@ -228,7 +228,7 @@ def remove_label_noise(dataset, label_noise_dict):
     dataset.hetero_graph_list = list(dataset.hetero_graphs.values())
 
 
-def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False):
+def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, use_full_cv = False):
     """ Adjusts the datasets for the split, set the split, impute, normalize and add node features
 
     Paramters
@@ -244,7 +244,8 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False):
     val_dataset: The validation dataset
     test_dataset: The test dataset
     """
-
+    if use_full_cv:
+        cv_dataset_cp = copy.deepcopy(cv_dataset)
     train_dataset = copy.deepcopy(cv_dataset)
     val_dataset = copy.deepcopy(cv_dataset)
     val_dataset.set_split("val", split)
@@ -268,9 +269,14 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False):
     add_node_features(train_dataset, node_types)
     add_node_features(val_dataset, node_types)
     add_node_features(test_dataset, node_types)
+    if use_full_cv:
+        add_node_features(cv_dataset_cp, node_types)
 
     # extract normalization parameters
-    node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset, clean= False)
+    if use_full_cv:
+        node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(cv_dataset_cp, clean= False)
+    else:
+        node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset, clean= False)
 
     # data normalization
     hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
