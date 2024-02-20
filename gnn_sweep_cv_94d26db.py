@@ -19,7 +19,7 @@ with open('training_configs/sweep_config_94d26b_split2.json', 'r') as file:
     sweep_configuration = json.load(file)
 
 sweep_configuration["method"] = "random"
-sweep_configuration["name"] = "Selected sweep, repeat only heterogeneous edges, 2 splits, 94d26db, correct splits"
+sweep_configuration["name"] = "Selected sweep, repeat only heterogeneous edges, 2 splits, 94d26db, correct splits, fixed loader"
 sweep_id = wandb.sweep(sweep=sweep_configuration, project= "selected_sweep_repeat")
 # change the name of the sweep
 
@@ -73,7 +73,7 @@ def main():
     run = wandb.init()
     #split = sweep_configuration["parameters"]["split"]["values"][0]
     split = wandb.config.split
-    train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0])
+    train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0], use_full_cv = False)
     features_label_dict = copy.deepcopy(label_dict_full)
     # get positions of features to eliminate and remove them from the feature label dict and the graphs
     for key in eliminate_features.keys():
@@ -120,7 +120,7 @@ def main():
                                                         )
 
     # create data loaders for training and test set
-    train_loader = DataLoader(train_dataset, batch_size = wandb.config.batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size = wandb.config.batch_size, shuffle=True, drop_last=True)
     val_loader = DataLoader(val_dataset, batch_size = 64, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size = 64, shuffle=False)
 
