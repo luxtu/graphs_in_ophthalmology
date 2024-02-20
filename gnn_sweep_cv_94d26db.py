@@ -1,6 +1,7 @@
 import torch
 import copy
 import json
+import pickle
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, cohen_kappa_score
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
@@ -14,11 +15,11 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 # empty cuda cache
 
 # Define sweep config
-with open('training_configs/sweep_config_94d26b_split3.json', 'r') as file:
+with open('training_configs/sweep_config_94d26b_split2.json', 'r') as file:
     sweep_configuration = json.load(file)
 
 sweep_configuration["method"] = "random"
-sweep_configuration["name"] = "Selected sweep, repeat heterogeneous edges, 3 splits, 94d26db"
+sweep_configuration["name"] = "Selected sweep, repeat only heterogeneous edges, 2 splits, 94d26db, correct splits"
 sweep_id = wandb.sweep(sweep=sweep_configuration, project= "selected_sweep_repeat")
 # change the name of the sweep
 
@@ -39,18 +40,13 @@ cv_pickle_processed = f"../data/{data_type}_{mode_cv}_selected_sweep_repeat_v2.p
 final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_selected_sweep_repeat_v2.pkl" 
 
 
-import pickle
 with open(cv_pickle_processed, "rb") as file:
     cv_dataset = pickle.load(file)
 with open(final_test_pickle_processed, "rb") as file:
     final_test_dataset = pickle.load(file)
 
 
-split = sweep_configuration["parameters"]["split"]["values"][0]
-train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0])
-
-
-with open("training_configs/feature_name_dict.json", "r") as file:
+with open("training_configs/feature_name_dict_new.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
@@ -61,28 +57,8 @@ if faz_node_bool:
     eliminate_features["faz"] = ["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"] 
 
 
-# get positions of features to eliminate and remove them from the feature label dict and the graphs
-for key in eliminate_features.keys():
-    for feat in eliminate_features[key]:
-        idx = features_label_dict[key].index(feat)
-        features_label_dict[key].remove(feat)
-        for data in train_dataset:
-            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
-        for data in val_dataset:
-            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
-        for data in test_dataset:
-            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
 
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# class weight extraction
-train_labels = [int(data.y[0]) for data in train_dataset]
-class_weights = dataprep_utils.get_class_weights(train_labels, verbose=False)
-class_weights = torch.tensor(class_weights, device=device)
-class_weights_weak = class_weights ** 0.5 
-
-num_classes = class_weights.shape[0]
-print(f"num classes: {num_classes}")
+#print(f"num classes: {num_classes}")
 node_types = ["graph_1", "graph_2"]
 
 agg_mode_dict = {"mean": global_mean_pool, "max": global_max_pool, "add": global_add_pool, "add_max": [global_add_pool, global_max_pool], "max_mean": [global_max_pool, global_mean_pool], "add_mean": [global_add_pool, global_mean_pool]}
@@ -91,14 +67,37 @@ heterogeneous_conv_dict = {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv}
 activation_dict = {"relu":torch.nn.functional.relu, "leaky" : torch.nn.functional.leaky_relu, "elu":torch.nn.functional.elu}
 
 
-train_dataset.to(device)
-val_dataset.to(device)
-test_dataset.to(device)
-
 
 def main():
     #torch.autograd.set_detect_anomaly(True)
     run = wandb.init()
+    #split = sweep_configuration["parameters"]["split"]["values"][0]
+    split = wandb.config.split
+    train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0])
+    features_label_dict = copy.deepcopy(label_dict_full)
+    # get positions of features to eliminate and remove them from the feature label dict and the graphs
+    for key in eliminate_features.keys():
+        for feat in eliminate_features[key]:
+            idx = features_label_dict[key].index(feat)
+            features_label_dict[key].remove(feat)
+            for data in train_dataset:
+                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+            for data in val_dataset:
+                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+            for data in test_dataset:
+                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # class weight extraction
+    train_labels = [int(data.y[0]) for data in train_dataset]
+    class_weights = dataprep_utils.get_class_weights(train_labels, verbose=False)
+    class_weights = torch.tensor(class_weights, device=device)
+    class_weights_weak = class_weights ** 0.5 
+    num_classes = class_weights.shape[0]
+
+    train_dataset.to(device)
+    val_dataset.to(device)
+    test_dataset.to(device)
 
     model = global_node_gnn.GNN_global_node(hidden_channels= wandb.config.hidden_channels,
                                                         out_channels= num_classes,
