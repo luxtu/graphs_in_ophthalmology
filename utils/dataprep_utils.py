@@ -58,7 +58,15 @@ def hetero_graph_imputation(dataset):
                 val[inf_pos] = 0
 
 
-def hetero_graph_normalization_params(train_dataset, clean = False):
+def mad(data, dim=None):
+    median = torch.median(data, dim=dim).values
+    mad = torch.median(torch.abs(data - median), dim=dim).values
+    scale_factor = 1.4826  # Scaling factor for normal distribution
+    mad *= scale_factor
+    return mad
+
+
+def hetero_graph_normalization_params(train_dataset, robust = False):
     """ Extracts the mean and std of the node features from the dataset
 
     Paramters
@@ -86,18 +94,13 @@ def hetero_graph_normalization_params(train_dataset, clean = False):
             node_tensors[key] = torch.cat([node_tensors[key], val]) if node_tensors[key] is not None else val
 
     for key, val in node_tensors.items():
-        if clean and key == "graph_1":
-            # find the indices of the values that are >0
-            idx = torch.where(val > 0)[0]
-            # select only the values that are >0
-            val = val[idx]
-            # calculate the mean and std
-            node_mean_tensors[key] = torch.mean(val, dim=0)
+        if robust:
+            node_mean_tensors[key]  = torch.median(val, dim =0).values 
+            node_std_tensors[key] = mad(val, dim =0)
+        else:
+            node_mean_tensors[key]  = torch.mean(val, dim=0)
             node_std_tensors[key] = torch.std(val, dim=0)
 
-        else:
-            node_mean_tensors[key] = torch.mean(val, dim=0)
-            node_std_tensors[key] = torch.std(val, dim=0)
 
     return node_mean_tensors, node_std_tensors
 
@@ -228,7 +231,7 @@ def remove_label_noise(dataset, label_noise_dict):
     dataset.hetero_graph_list = list(dataset.hetero_graphs.values())
 
 
-def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, use_full_cv = False):
+def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, use_full_cv = False, robust = False):
     """ Adjusts the datasets for the split, set the split, impute, normalize and add node features
 
     Paramters
@@ -274,9 +277,9 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, us
 
     # extract normalization parameters
     if use_full_cv:
-        node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(cv_dataset_cp, clean= False)
+        node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(cv_dataset_cp, robust= robust)
     else:
-        node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset, clean= False)
+        node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset, robust= robust)
 
     # data normalization
     hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
