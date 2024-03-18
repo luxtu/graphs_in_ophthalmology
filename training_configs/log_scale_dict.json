@@ -1,0 +1,23 @@
+{"graph_1": [
+"length", 
+"distance", 
+"curveness", 
+"volume", 
+"avgCrossSection", 
+"avgRadiusAvg", 
+"maxRadiusAvg", 
+"num_voxels"], 
+"graph_2": [
+"area", 
+"perimeter", 
+"equivalent_diameter", 
+"feret_diameter_max",
+"axis_major_length",
+"axis_minor_length"],
+"faz": [
+"area", 
+"perimeter", 
+"equivalent_diameter", 
+"feret_diameter_max", 
+"axis_major_length", 
+"axis_minor_length"]}
