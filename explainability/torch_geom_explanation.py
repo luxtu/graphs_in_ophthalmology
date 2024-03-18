@@ -25,7 +25,35 @@ def _calculate_adaptive_node_threshold(explanation_graph, explained_gradient = 0
 
     return threshold
 
+def _calculate_adaptive_node_threshold_pos(explanation_graph, explained_gradient = 0.95):
+    """
+    Calculate the threshold for the node importance such that 95% of the total gradient is explained (without the gradients from nodes that contribute less than 0.05% to the total gradient)
+    Only consider the positive gradients
+    """
+    import torch
+    import copy
 
+    abs_dict = {}
+    for key in explanation_graph.node_mask_dict.keys():
+        abs_dict[key] = copy.deepcopy(explanation_graph.node_mask_dict[key])
+    
+    total_pos_grad = 0
+    for key in explanation_graph.node_mask_dict.keys():
+        grad = abs_dict[key].sum(dim=-1)
+        grad[grad < 0] = 0  
+        total_pos_grad += grad.sum()
+    node_value = torch.cat([abs_dict[key].sum(dim=-1) for key in explanation_graph.node_mask_dict.keys()], dim=0)
+    node_value[node_value < 0] = 0
+    sorted_node_value = torch.sort(node_value, descending=True)[0]
+    # get rid of the nodes that contribute less than 0.05% to the total gradient
+    sorted_node_value = sorted_node_value[sorted_node_value > 0.0005 * total_pos_grad]
+    cum_sum = torch.cumsum(sorted_node_value, dim=0)
+    cropped_grad = cum_sum[-1]
+    threshold = sorted_node_value[cum_sum < explained_gradient * cropped_grad][-1] # 30
+            
+    return threshold
+        
+    
 
 def _remove_inlay(hetero_graph, work_dict, node_key):
     """
@@ -40,7 +68,7 @@ def _remove_inlay(hetero_graph, work_dict, node_key):
 
     return work_dict
 
-def _feature_importance_plot(explanation, path, features_label_dict, score):
+def _feature_importance_plot(explanation, path, features_label_dict, score, num_features = 5, only_positive = False):
 
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -67,8 +95,11 @@ def _feature_importance_plot(explanation, path, features_label_dict, score):
     for i, node_type in enumerate(explanation.node_mask_dict.keys()):
         score_indv = score[node_type]
         df = pd.DataFrame({'score': score_indv}, index=features_label_dict[node_type])
-        df_sorted = df.reindex(df.abs().sort_values('score', ascending=False).index)
-        df_sorted = df_sorted.head(5)
+        if only_positive:
+            df_sorted = df.reindex(df.sort_values('score', ascending=False).index)
+        else:
+            df_sorted = df.reindex(df.abs().sort_values('score', ascending=False).index)
+        df_sorted = df_sorted.head(num_features)
         # use the same xlim for all subplots
         # get rid of the legend
         ax_out = df_sorted.plot(
@@ -86,6 +117,58 @@ def _feature_importance_plot(explanation, path, features_label_dict, score):
     plt.savefig(path)
     plt.close()
 
+
+def _feature_importance_boxplot(hetero_graph, path, features_label_dict, het_graph_rel_pos_dict, score, num_features = 5, only_positive = False):
+        
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    # change the path by splitting it and adding _boxplot, split at the last dot
+    path = path.rsplit(".", 1)[0] + "_boxplot." + path.rsplit(".", 1)[1]
+
+    node_typeto_proper_name = {"graph_1": "Vessel", "graph_2": "ICP Area", "faz": "FAZ"}
+    all_feat_labels = []
+    for node_type in hetero_graph.x_dict.keys():
+        all_feat_labels += [
+            f'{node_typeto_proper_name[node_type]}: {label}' for label in features_label_dict[node_type]
+        ]
+
+    # three subplots below each other
+    fig, axs = plt.subplots(3, 1, figsize=(10, 7))
+    # get the 5 most important features for each graph and plot them below each other
+
+    top_feature_dict = {}
+    for i, node_type in enumerate(hetero_graph.x_dict.keys()):
+        score_indv = score[node_type]
+        df = pd.DataFrame({'score': score_indv}, index=features_label_dict[node_type])
+        if only_positive:
+            df_sorted = df.reindex(df.sort_values('score', ascending=False).index)
+        else:
+            df_sorted = df.reindex(df.abs().sort_values('score', ascending=False).index)
+        df_sorted = df_sorted.head(num_features)
+        top_feature_dict[node_type] = df_sorted.index
+    
+    # for each of the top features, get the values in the graph of the relevant nodes
+    for i, node_type in enumerate(hetero_graph.x_dict.keys()):
+        # get the top features
+        top_features = top_feature_dict[node_type]
+        feature_values = {}
+        for feature in top_features:
+            feature_values[feature] = hetero_graph[node_type].x[het_graph_rel_pos_dict[node_type]][:, features_label_dict[node_type].index(feature)].cpu().detach().numpy()
+        df = pd.DataFrame(feature_values)
+        ax_out = df.boxplot(ax = axs[i], vert = False)
+        axs[i].set_title(node_typeto_proper_name[node_type])
+
+        ax_out.invert_yaxis()
+    #plt.gca().invert_yaxis()
+    #ax.bar_label(container=ax.containers[0], label_type='edge')
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
+
+
+
+    
 
 def store_relevant_nodes_csv(explanation_graph, hetero_graph, path, features_label_dict, faz_node = False, explained_gradient = 0.95):
 
@@ -115,10 +198,16 @@ def store_relevant_nodes_csv(explanation_graph, hetero_graph, path, features_lab
 
 
 
-def identifiy_relevant_nodes(explanation_graph, hetero_graph, explained_gradient, faz_node = False):
+def identifiy_relevant_nodes(explanation_graph, hetero_graph, explained_gradient, faz_node = False, only_positive = False):
 
     import numpy as np
-    threshold = _calculate_adaptive_node_threshold(explanation_graph, explained_gradient = explained_gradient)
+        
+    if only_positive:
+        threshold = _calculate_adaptive_node_threshold_pos(explanation_graph, explained_gradient = explained_gradient)
+        if threshold < 0:
+            threshold = 0
+    else:
+        threshold = _calculate_adaptive_node_threshold(explanation_graph, explained_gradient = explained_gradient)
 
     graph_names = ["graph_1", "graph_2"]
     if faz_node:
@@ -127,40 +216,131 @@ def identifiy_relevant_nodes(explanation_graph, hetero_graph, explained_gradient
     het_graph_rel_pos_dict = {}
     for graph_name in graph_names:
         #filter the nodes that are above the threshold
-        het_graph_rel_pos = explanation_graph.node_mask_dict[graph_name].abs().sum(dim=-1) > threshold
+        if only_positive:
+            het_graph_rel_pos = explanation_graph.node_mask_dict[graph_name].sum(dim=-1) > threshold
+        else:
+            het_graph_rel_pos = explanation_graph.node_mask_dict[graph_name].abs().sum(dim=-1) > threshold
+
         het_graph_rel_pos = het_graph_rel_pos.cpu().detach().numpy()
+        # data should not contain this information anymore
         # remove the inlay
         # pos to cpu and detach
         het_graph_pos = hetero_graph[graph_name].pos.cpu().detach().numpy()
         het_graph_rel_pos = het_graph_rel_pos & (het_graph_pos[:,0] < 1100) & (het_graph_pos[:,1] > 100)
         het_graph_rel_pos_dict[graph_name] = het_graph_rel_pos
-
     return het_graph_rel_pos_dict
 
 
 
-def top_k_important_nodes(explanation_graph, hetero_graph, top_k = 100):
+def top_k_important_nodes(explanation_graph, hetero_graph, faz_node = False ,top_k = 100, only_positive = False, each_type = False):
     """
-    Returns the gradients of the top k most important nodes for each graph, and features of these nodes
+    Returns the gradients of the top k most important nodes for each graph or across all graphs
     """
-    import torch
-    abs_dict = {}
-    grad_dict = {}
-    feature_dict = {}
-    for key in explanation_graph.node_mask_dict.keys():
-        abs_dict[key] = torch.abs(explanation_graph.node_mask_dict[key])
-        # remove the inlay
-        abs_dict = _remove_inlay(hetero_graph, abs_dict, key)
-        # sort the gradients and get the top k
-        _, indices = torch.sort(abs_dict[key].sum(dim=-1), descending=True)
-        # get the top k indices
-        top_k_indices = indices[:top_k]
-        # get the gradients for the top k indices
-        grad_dict[key] = explanation_graph.node_mask_dict[key][top_k_indices]
-        # get the features for the top k indices
-        feature_dict[key] = hetero_graph[key].x[top_k_indices]
+    if each_type:
+        return _top_k_important_nodes_all_types(explanation_graph, hetero_graph, faz_node = faz_node ,top_k = top_k, only_positive = only_positive)
+    else:
+        return _top_k_important_nodes(explanation_graph, hetero_graph, faz_node = faz_node ,top_k = top_k, only_positive = only_positive)
 
-    return grad_dict, feature_dict
+
+
+def _top_k_important_nodes(explanation_graph, hetero_graph, faz_node = False ,top_k = 100, only_positive = False):
+    """
+    Returns the gradients of the top k most important nodes across all graphs
+    """
+    import numpy as np
+    import torch
+    import copy
+
+    graph_names = ["graph_1", "graph_2"]
+    if faz_node:
+        graph_names.append("faz")
+
+    het_graph_rel_pos_dict = {}
+    # find the threshold that only includes the top k nodes
+    
+    for graph_name in graph_names:
+        #filter the nodes that are above the threshold
+        if only_positive:
+            het_graph_weight = explanation_graph.node_mask_dict[graph_name].sum(dim=-1)
+        else:
+            het_graph_weight = explanation_graph.node_mask_dict[graph_name].abs().sum(dim=-1)
+        het_graph_weight = het_graph_weight.cpu().detach().numpy()
+        inlay_pos = (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,0] > 1100) & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,1] < 100)
+        het_graph_weight[inlay_pos] = 0
+    
+        #concat the weights
+        if graph_name == "graph_1":
+            all_weights = het_graph_weight
+        else:
+            all_weights = np.concatenate((all_weights, het_graph_weight))
+        
+    # set the threshold to the kth largest value
+    threshold = np.sort(all_weights)[-top_k]
+    if threshold < 0:
+        threshold = 0 + 1e-6
+    print("threshold", threshold)
+    for graph_name in graph_names:
+        #filter the nodes that are above the threshold
+        if only_positive:
+            het_graph_rel_pos = explanation_graph.node_mask_dict[graph_name].sum(dim=-1) >= threshold
+        else:
+            het_graph_rel_pos = explanation_graph.node_mask_dict[graph_name].abs().sum(dim=-1) >= threshold
+        het_graph_rel_pos = het_graph_rel_pos.cpu().detach().numpy()
+        # remove the inlay
+        het_graph_rel_pos = het_graph_rel_pos & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,0] < 1100) & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,1] > 100)
+        het_graph_rel_pos_dict[graph_name] = het_graph_rel_pos
+    
+    return het_graph_rel_pos_dict
+                    
+
+        
+def _top_k_important_nodes_all_types(explanation_graph, hetero_graph, faz_node = False, top_k = 100, only_positive = False):
+    """
+    Returns the gradients of the top k most important nodes for each graph
+    """
+    import numpy as np
+    import torch
+    import copy
+        
+    graph_names = ["graph_1", "graph_2"]
+    if faz_node:
+        graph_names.append("faz")
+    
+    het_graph_rel_pos_dict = {}
+    het_graph_rel_weight_dict = {}
+    for graph_name in graph_names:
+        #filter the nodes that are above the threshold
+        if only_positive:
+            het_graph_weight = explanation_graph.node_mask_dict[graph_name].sum(dim=-1)
+        else:
+            het_graph_weight = explanation_graph.node_mask_dict[graph_name].abs().sum(dim=-1)
+        # set the weights of the inlay to 0
+        het_graph_weight = het_graph_weight.cpu().detach().numpy()
+        inlay_pos = (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,0] > 1100) & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,1] < 100)
+        het_graph_weight[inlay_pos] = 0
+        het_graph_weight = torch.from_numpy(het_graph_weight)
+        if graph_name == "faz":
+            _, indices = torch.topk(het_graph_weight, 1)
+            het_graph_rel_pos = torch.zeros(het_graph_weight.shape, dtype = torch.bool)
+            het_graph_rel_pos[indices] = True
+            if only_positive:
+                het_graph_rel_pos = het_graph_rel_pos & (het_graph_weight > 0)
+            het_graph_rel_pos = het_graph_rel_pos.cpu().detach().numpy()
+        else:
+            _, indices = torch.topk(het_graph_weight, top_k)
+            het_graph_rel_pos = torch.zeros(het_graph_weight.shape, dtype = torch.bool)
+            het_graph_rel_pos[indices] = True
+            if only_positive:
+                het_graph_rel_pos = het_graph_rel_pos & (het_graph_weight > 0)
+            het_graph_rel_pos = het_graph_rel_pos.cpu().detach().numpy()
+        het_graph_rel_pos_dict[graph_name] = het_graph_rel_pos
+        het_graph_rel_weight_dict[graph_name] = het_graph_weight.cpu().detach().numpy()
+        
+
+    return het_graph_rel_pos_dict
+
+    
+
 
 def adaptive_important_nodes(explanation_graph, hetero_graph):
     """
@@ -191,7 +371,7 @@ def adaptive_important_nodes(explanation_graph, hetero_graph):
 
 
 
-def visualize_feature_importance(explanation, hetero_graph, path, features_label_dict, explained_gradient = None):
+def visualize_feature_importance(explanation, hetero_graph, path, features_label_dict, explained_gradient = None, only_positive = False, with_boxplot = False, num_features = 5):
     """
     Wrapper for the pytorch geom function, since it does not include tight layout.
     If there is no threshold, all the nodes are considered for the importance score.
@@ -204,65 +384,57 @@ def visualize_feature_importance(explanation, hetero_graph, path, features_label
     abs_dict = {}
     work_dict = {}
     for key in explanation.node_mask_dict.keys():
-        abs_dict[key] = copy.deepcopy(torch.abs(explanation.node_mask_dict[key]))
+        if only_positive:
+            abs_dict[key] = copy.deepcopy(explanation.node_mask_dict[key])
+            abs_dict[key][abs_dict[key] < 0] = 0
+        else:
+            abs_dict[key] = copy.deepcopy(torch.abs(explanation.node_mask_dict[key]))
         work_dict[key] = copy.deepcopy(explanation.node_mask_dict[key])
-
-    # how can the features still be negative?
 
     if explained_gradient is None:
 
-
-        #score = torch.cat([node_mask.sum(dim=0) for node_mask in work_dict.values()], dim=0) # dim 0 is the feature dimension
-        #score = score.cpu().numpy() # .detach()
-
         # make the score a dictionary with the keys being the graph names
+        # score is the sum of the absolute values of the gradients for each feature for each nodetype
         score = {}
         for key in explanation.node_mask_dict.keys():
             score[key] = work_dict[key].sum(dim=0).cpu().numpy()
 
-
-    else:
-
+        het_graph_rel_pos_dict = {}
+        
+        for key in explanation.node_mask_dict.keys():
+            het_graph_rel_pos_dict[key] = torch.ones(explanation.node_mask_dict[key].sum(dim=-1).shape, dtype = torch.bool).cpu().detach().numpy()
+    elif isinstance(explained_gradient, float):
         faz_node = False
         if "faz" in explanation.node_mask_dict.keys():
             faz_node = True
-
-        het_graph_rel_pos_dict = identifiy_relevant_nodes(explanation, hetero_graph, explained_gradient = explained_gradient, faz_node = faz_node, )
+        het_graph_rel_pos_dict = identifiy_relevant_nodes(explanation, hetero_graph, explained_gradient = explained_gradient, faz_node = faz_node, only_positive = only_positive)
 
         # print number of relevant nodes
         for key in explanation.node_mask_dict.keys():
             print(f"{key}: {het_graph_rel_pos_dict[key].sum()}")
+        score = {}
+        for key in explanation.node_mask_dict.keys():
+            score[key] = work_dict[key][het_graph_rel_pos_dict[key]].sum(dim=0).cpu().numpy()
+        
+    elif isinstance(explained_gradient, int):
+        faz_node = False
+        if "faz" in explanation.node_mask_dict.keys():
+            faz_node = True
+        het_graph_rel_pos_dict = top_k_important_nodes(explanation, hetero_graph, faz_node = faz_node,top_k = explained_gradient, only_positive = only_positive)
 
-
+        # print number of relevant nodes
+        for key in explanation.node_mask_dict.keys():
+            print(f"{key}: {het_graph_rel_pos_dict[key].sum()}")
         score = {}
         for key in explanation.node_mask_dict.keys():
             score[key] = work_dict[key][het_graph_rel_pos_dict[key]].sum(dim=0).cpu().numpy()
 
 
-        # calculate the score for each node, index only the nodes that are relevant
-        #score = torch.cat([node_mask[het_graph_rel_pos_dict[key]].sum(dim=0) for key, node_mask in work_dict.items()], dim=0) # dim 0 is the feature dimension
-        #score = score.cpu().numpy() # .detach()
+    _feature_importance_plot(explanation, path, features_label_dict, score, num_features=num_features, only_positive = only_positive)
 
-        
+    if with_boxplot:
+        _feature_importance_boxplot(hetero_graph, path, features_label_dict, het_graph_rel_pos_dict, score, num_features=num_features, only_positive = only_positive)
 
-        #threshold = _calculate_adaptive_node_threshold(explanation)
-#
-        ## remove those nodes for the score that are below the threshold or in the inlay
-        #for node_key in ["graph_1", "graph_2"]:
-        #    # get the importances for each node and sum over the absulute values for each feature
-        #    importances = abs_dict[node_key].sum(dim=-1)
-        #    # set all rows to 0 that are below the threshold, this way the sum of the node mask is not affected
-        #    work_dict[node_key][importances < threshold, :] = 0
-        #    # remove the inlay
-        #    work_dict = _remove_inlay(hetero_graph, work_dict, node_key)
-
-
-
-        #score = torch.cat([node_mask.sum(dim=0) for node_mask in work_dict.values()], dim=0) # dim 0 is the feature dimension
-        #score = score.cpu().numpy() # .detach()
-
-
-    _feature_importance_plot(explanation, path, features_label_dict, score)
 
 
 
@@ -338,7 +510,7 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
             #print("edge_threshold", edge_threshold)
 
         elif edge_threshold == "node_threshold":
-            edge_threshold = threshold*0.00001
+            edge_threshold = threshold*0.01
 
     het_graph_rel_pos_dict = {}
 
@@ -370,8 +542,8 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
         print("het_graph1_rel_edges", het_graph1_rel_edges.sum())
         print("het_graph2_rel_edges", het_graph2_rel_edges.sum())
 
-        #het_graph12_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name] > edge_threshold
-        #het_graph21_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name] > edge_threshold
+        het_graph12_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_2_name] > edge_threshold
+        het_graph21_rel_edges = explanation_graph.edge_mask_dict[graph_2_name, "rev_to", graph_1_name] > edge_threshold
 
         #if faz_node:
         #    het_graph13_rel_edges = explanation_graph.edge_mask_dict[graph_1_name, "to", graph_3_name] > edge_threshold
@@ -392,14 +564,14 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
                     #ax_ax.plot(het_graph2_pos[edge,1], het_graph2_pos[edge,0], c="blue",linewidth=1, alpha=0.5, zorder = 1)
                     ax_ax.plot(het_graph_pos[graph_2_name][edge,1], het_graph_pos[graph_2_name][edge,0], c="orange",linewidth=1, alpha=0.5, zorder = 1)
 #
-        #for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
-        #    if het_graph12_rel_edges[i] or het_graph21_rel_edges[i]:
-        #        #x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
-        #        #y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
-        #        x_pos = (het_graph_pos[graph_1_name][edge[0],1], het_graph_pos[graph_2_name][edge[1],1])
-        #        y_pos = (het_graph_pos[graph_1_name][edge[0],0], het_graph_pos[graph_2_name][edge[1],0])
-        #        for ax_ax in ax:
-        #            ax_ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
+        for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_2_name].edge_index.cpu().detach().numpy().T):
+            if het_graph12_rel_edges[i] or het_graph21_rel_edges[i]:
+                #x_pos = (het_graph1_pos[edge[0],1], het_graph2_pos[edge[1],1])
+                #y_pos = (het_graph1_pos[edge[0],0], het_graph2_pos[edge[1],0])
+                x_pos = (het_graph_pos[graph_1_name][edge[0],1], het_graph_pos[graph_2_name][edge[1],1])
+                y_pos = (het_graph_pos[graph_1_name][edge[0],0], het_graph_pos[graph_2_name][edge[1],0])
+                for ax_ax in ax:
+                    ax_ax.plot(x_pos, y_pos, linewidth=1, alpha=0.5, c= "black", zorder = 1)
 #
         #if faz_node:
         #    for i, edge in enumerate(hetero_graph[graph_1_name, 'to', graph_3_name].edge_index.cpu().detach().numpy().T):
@@ -430,7 +602,7 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
 
 
 
-def visualize_node_importance_histogram(explanation_graph, path, faz_node = False):
+def visualize_node_importance_histogram(explanation_graph, path, faz_node = False, abs = True):
 
     import matplotlib.pyplot as plt
     import numpy as np
@@ -443,11 +615,18 @@ def visualize_node_importance_histogram(explanation_graph, path, faz_node = Fals
     fig, ax = plt.subplots()
 
     # abs the node masks
-    het_graph1_rel_pos = explanation_graph.node_mask_dict[graph_1_name].abs().sum(dim=-1) 
-    het_graph2_rel_pos = explanation_graph.node_mask_dict[graph_2_name].abs().sum(dim=-1)
+    if abs:
+        het_graph1_rel_pos = explanation_graph.node_mask_dict[graph_1_name].abs().sum(dim=-1) 
+        het_graph2_rel_pos = explanation_graph.node_mask_dict[graph_2_name].abs().sum(dim=-1)
 
-    if faz_node:
-        het_graph3_rel_pos = explanation_graph.node_mask_dict[graph_3_name].abs().sum(dim=-1)
+        if faz_node:
+            het_graph3_rel_pos = explanation_graph.node_mask_dict[graph_3_name].abs().sum(dim=-1)
+    else:
+        het_graph1_rel_pos = explanation_graph.node_mask_dict[graph_1_name].sum(dim=-1) 
+        het_graph2_rel_pos = explanation_graph.node_mask_dict[graph_2_name].sum(dim=-1)
+
+        if faz_node:
+            het_graph3_rel_pos = explanation_graph.node_mask_dict[graph_3_name].sum(dim=-1)
 
 
     # log transform data and add 0.1 to avoid log(0)
@@ -460,14 +639,15 @@ def visualize_node_importance_histogram(explanation_graph, path, faz_node = Fals
 
     # set the range for the histogram
     max_val = max(het_graph1_rel_pos.cpu().detach().numpy().max(), het_graph2_rel_pos.cpu().detach().numpy().max())+offset
-    min_val = offset #+min(het_graph1_rel_pos.cpu().detach().numpy().max(), het_graph2_rel_pos.cpu().detach().numpy().max())
+    #min
+    min_val = min(het_graph1_rel_pos.cpu().detach().numpy().min(), het_graph2_rel_pos.cpu().detach().numpy().min()) + offset
 
     if faz_node:
         #het_graph3_rel_pos = torch.log(het_graph3_rel_pos)
         max_val = max(max_val, het_graph3_rel_pos.cpu().detach().numpy().max()+offset)
         min_val = min(min_val, het_graph3_rel_pos.cpu().detach().numpy().min()+offset)
 
-    min_val = offset
+    #min_val = offset
     # round the maxval to a power of 10
     #max_val = np.ceil(np.log10(max_val))
     #max_val = 10**max_val
@@ -491,7 +671,7 @@ def visualize_node_importance_histogram(explanation_graph, path, faz_node = Fals
 
 
     #plt.xscale('log')
-    plt.xlim(offset, max_val)
+    plt.xlim(min_val, max_val)
     # set xticks according to original values before offset
     # go from 0.01 to max_val in *10 increments
 
