@@ -21,25 +21,25 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 # Define sweep config
 sweep_configuration = {
     "method": "random",
-    "name": "HGT, Less Heads, Less Layers Random Search 3 Class, Split 3, Eliminated Features, Smooth Label Loss(Really), No Graph Cleaning, Faz Node, Isolated Nodes Removed",
+    "name": "HGT, Less LR, Less Heads, Less Layers Grid Search 3 Class, Split 3, Eliminated Features, Smooth Label Loss(Really), No Graph Cleaning, Faz Node, Isolated Nodes Removed",
     "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
     "parameters": {
         "batch_size": {"values": [8, 16, 32, 64]},
         "epochs": {"values": [100]},
-        "lr": {"max": 0.05, "min": 0.005}, # learning rate to high does not work
+        "lr": {"max": 0.01, "min": 0.001}, # learning rate to high does not work # "max": 0.05, "min": 0.005} prev, put lower
         "weight_decay": {"max": 0.01, "min": 0.00001},
         "hidden_channels": {"values": [16, 32, 64]}, #[64, 128]
         "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
-        "num_layers": {"values": [1,2]}, # ,5
-        "aggregation_mode": {"values": ["mean", "add_max", "max_mean"]},# removed, "add", "max", "add_mean"
+        "num_layers": {"values": [1, 2]}, # ,2,5
+        "aggregation_mode": {"values": ["add_max", "max_mean", "add", "mean"]},# removed, "add", "max", "add_mean", "mean", "add_max",
         "pre_layers": {"values": [1,2,4]},
         "post_layers": {"values": [1,2,4]},
         "final_layers": {"values": [1,2,4]},
         "num_heads": {"values": [1, 2, 4]}, # , 8,
-        "batch_norm": {"values": [True, False]},
+        "batch_norm": {"values": [True]},  #, False
         "class_weights": {"values": ["balanced"]}, # "balanced", #  # "unbalanced", # , "weak_balanced" 
         "dataset": {"values": ["DCP"]}, #, "DCP"
-        "activation": {"values": ["relu", "leaky", "elu"]},
+        "activation": {"values": ["leaky"]}, # "relu", "elu",
         "faz_node": {"values": [True]},
         "split": {"values": [3]},
         "start_rep": {"values": [True, False]},
@@ -101,7 +101,7 @@ else:
     faz_region_edge_path = f"../data/{data_type}_faz_region_edges"
     faz_vessel_edge_path = f"../data/{data_type}_faz_vessel_edges"
 
-    cv_pickle = f"../data/{data_type}_{mode_cv}_dataset_faz.pkl"  # _isol_not_removed
+    cv_pickle = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features.pkl"  # _isol_not_removed
     cv_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
                                                             graph_path_2=void_graph_path,
                                                             graph_path_3=faz_node_path,
@@ -113,10 +113,10 @@ else:
                                                             line_graph_1 =True, 
                                                             class_dict = octa_dr_dict,
                                                             pickle_file = cv_pickle, #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
-                                                            remove_isolated_nodes=True
+                                                            remove_isolated_nodes=False
                                                             )
 
-    final_test_pickle = f"../data/{data_type}_{mode_final_test}_dataset_faz.pkl"   # _isol_not_removed
+    final_test_pickle = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features.pkl"   # _isol_not_removed
     final_test_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
                                                             graph_path_2=void_graph_path,
                                                             graph_path_3=faz_node_path,
@@ -128,7 +128,7 @@ else:
                                                             line_graph_1 =True, 
                                                             class_dict = octa_dr_dict,
                                                             pickle_file = final_test_pickle, #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
-                                                            remove_isolated_nodes=True
+                                                            remove_isolated_nodes=False
                                                             )
 
 
@@ -137,23 +137,26 @@ else:
 # update the label dict
 #final_test_dataset.update_class(octa_dr_dict)
 #cv_dataset.update_class(octa_dr_dict)
-#image_path = f"../data/{data_type}_images"
-#json_path = f"../data/{data_type}_json"
-#seg_size = 1216
+image_path = f"../data/{data_type}_images"
+json_path = f"../data/{data_type}_json"
+seg_size = 1216
 #
-#cv_dataset_cl = prep.add_centerline_statistics_multi(cv_dataset, image_path, json_path, seg_size)
-#final_test_dataset_cl = prep.add_centerline_statistics_multi(final_test_dataset, image_path, json_path, seg_size)
+cv_dataset_cl = prep.add_centerline_statistics_multi(cv_dataset, image_path, json_path, seg_size)
+final_test_dataset_cl = prep.add_centerline_statistics_multi(final_test_dataset, image_path, json_path, seg_size)
 #
 ## clean the data
-#cv_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(cv_dataset_cl)
-#final_test_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(final_test_dataset_cl)
-#
-#cv_dataset_dict = dict(zip([graph.graph_id for graph in cv_dataset.hetero_graph_list], cv_dataset.hetero_graph_list))
-#final_test_dataset_dict = dict(zip([graph.graph_id for graph in final_test_dataset.hetero_graph_list], final_test_dataset.hetero_graph_list))
+cv_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(cv_dataset_cl)
+final_test_dataset.hetero_graph_list = prep.hetero_graph_cleanup_multi(final_test_dataset_cl)
+
+cv_dataset.hetero_graph_list = cv_dataset_cl
+final_test_dataset.hetero_graph_list = final_test_dataset_cl
+
+cv_dataset_dict = dict(zip([graph.graph_id for graph in cv_dataset.hetero_graph_list], cv_dataset.hetero_graph_list))
+final_test_dataset_dict = dict(zip([graph.graph_id for graph in final_test_dataset.hetero_graph_list], final_test_dataset.hetero_graph_list))
 #
 ## set the dictionaries
-#cv_dataset.hetero_graphs = cv_dataset_dict
-#final_test_dataset.hetero_graphs = final_test_dataset_dict
+cv_dataset.hetero_graphs = cv_dataset_dict
+final_test_dataset.hetero_graphs = final_test_dataset_dict
 
 
 split = sweep_configuration["parameters"]["split"]["values"][0]
@@ -266,6 +269,8 @@ def main():
     classifier = graph_classifier.graphClassifierHetero(model, loss_dict[wandb.config.class_weights], lr = wandb.config.lr, weight_decay =wandb.config.weight_decay, regression=False, smooth_label_loss = wandb.config.smooth_label_loss) 
 
     best_val_bal_acc = 0
+    best_val_bal_acc_post = 0
+
     best_mean_auc = 0
     best_pred = None
     for epoch in range(1, wandb.config.epochs + 1):
@@ -334,22 +339,17 @@ def main():
 
         if val_bal_acc > best_val_bal_acc:
             best_val_bal_acc = val_bal_acc
-            if best_val_bal_acc > 0.65:
 
-                torch.save(classifier.model.state_dict(), f"checkpoints/{wandb.config.dataset}_model_{wandb.config.split}_faz_node_{wandb.config.faz_node}_{run.id}.pt")
 
-                # run inference on test set
-                y_prob_test, y_true_test = classifier.predict(test_loader)
-                y_pred_test = y_prob_test.argmax(axis=1)
-                test_acc = accuracy_score(y_true_test, y_pred_test)
-                test_bal_acc = balanced_accuracy_score(y_true_test, y_pred_test)
-                res_dict["test_acc"] = test_acc
-                res_dict["test_bal_acc"] = test_bal_acc
+        if val_bal_acc > 0.60 and val_bal_acc > best_val_bal_acc_post and epoch > 50:
+            best_val_bal_acc_post = val_bal_acc
+            torch.save(classifier.model.state_dict(), f"checkpoints/HGT_{wandb.config.dataset}_model_{wandb.config.split}_faz_node_{wandb.config.faz_node}_{run.id}.pt")
+            print("#"*20)
+            print(f"Test accuracy: {test_acc}")
+            print(f"Test balanced accuracy: {test_bal_acc}")
+            print("#"*20)
 
-                print("#"*20)
-                print(f"Test accuracy: {test_acc}")
-                print(f"Test balanced accuracy: {test_bal_acc}")
-                print("#"*20)
+            res_dict["best_val_bal_acc_post"] = best_val_bal_acc_post
 
 
 
@@ -363,4 +363,4 @@ def main():
 
     wandb.log({"roc": wandb.plot.roc_curve(y_true_val, best_pred, labels = label_names)})
 
-wandb.agent(sweep_id, function=main, count=200)
+wandb.agent(sweep_id, function=main, count=10)
