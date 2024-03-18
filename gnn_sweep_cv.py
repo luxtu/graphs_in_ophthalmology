@@ -15,11 +15,11 @@ from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
 # loading the sweep configuration and starting the sweep
 #################################
-with open('training_configs/sweep_config.json', 'r') as file:
+with open('sweep_configs/sweep_config.json', 'r') as file: #_f41op9et
     sweep_configuration = json.load(file)
 sweep_configuration["method"] = "random"
-sweep_configuration["name"] = "SAM, all splits,  rf + corr features, aggr schemes, fixed region features"
-sweep_id = wandb.sweep(sweep=sweep_configuration, project= "fixed vessel region, no <0 del")
+sweep_configuration["name"] = "All splits, corr features 95 del, sample aggr section between 400 and 1200"
+sweep_id = wandb.sweep(sweep=sweep_configuration, project= "good data, more hyperparam model")
 
 
 
@@ -32,8 +32,11 @@ mode_cv = "cv"
 mode_final_test = "final_test"
 #cv_pickle_processed = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl" 
 #final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed_more_features_processed_region_fix.pkl"
-cv_pickle_processed = f"../data/{data_type}_{mode_cv}_region_vessels_no_del_smaller0.pkl"
-final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_region_vessels_no_del_smaller0.pkl" 
+#cv_pickle_processed = f"../data/{data_type}_{mode_cv}_region_vessels_no_del_smaller0.pkl"
+#final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_region_vessels_no_del_smaller0.pkl" 
+cv_pickle_processed = f"../data/{data_type}_{mode_cv}_selected_sweep_repeat_v2.pkl"
+final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_selected_sweep_repeat_v2.pkl" 
+
 with open(cv_pickle_processed, "rb") as file:
     cv_dataset = pickle.load(file)
 with open(final_test_pickle_processed, "rb") as file:
@@ -42,20 +45,19 @@ with open(final_test_pickle_processed, "rb") as file:
 # adjust the dataset for the split
 #################################
 split = sweep_configuration["parameters"]["split"]["values"][0]
-train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0])
 
 
 # include the desired features
 #################################
-with open("training_configs/feature_name_dict_max.json", "r") as file:
+with open("training_configs/feature_name_dict_new.json", "r") as file: #feature_name_dict_max
     label_dict_full = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
-with open('training_configs/included_features_rf_importance_corr_98.json', 'r') as file:
+with open('training_configs/included_features_corr_95.json', 'r') as file:
     included_features = json.load(file)
 # remove faz key if faz node is not used
 if not faz_node_bool:
     included_features.pop("faz")
-dataprep_utils.eliminate_features(included_features, features_label_dict, [train_dataset, val_dataset, test_dataset])
+
 # print the included feature names
 print("Feature names: Graph 1")
 print(features_label_dict["graph_1"])
@@ -63,7 +65,7 @@ print("Feature names: Graph 2")
 print(features_label_dict["graph_2"])
 print("Feature names: Faz")
 print(features_label_dict["faz"])
-
+train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0])
 
 # initialize the some model parameters
 #################################
@@ -88,18 +90,24 @@ loss_weights_dict = {"balanced": class_weights, "unbalanced": None, "weak_balanc
 #dataprep_utils.add_virtual_node(val_dataset)
 #dataprep_utils.add_virtual_node(test_dataset)
 
-train_dataset.to(device)
-val_dataset.to(device)
-test_dataset.to(device)
-
-
 
 print(val_dataset[0])
+
+# delete the datasets before the sweep
+del train_dataset
+del val_dataset
+del test_dataset
 
 
 def main():
     #torch.autograd.set_detect_anomaly(True)
     run = wandb.init()
+    split = wandb.config.split
+    train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0])
+    train_dataset.to(device)
+    val_dataset.to(device)
+    test_dataset.to(device)
+    dataprep_utils.eliminate_features(included_features, features_label_dict, [train_dataset, val_dataset, test_dataset])
 
     model = heterogeneous_gnn.Heterogeneous_GNN(hidden_channels= wandb.config.hidden_channels, #random_modality_gnn.Random_Modality_GNN
                                                         out_channels= num_classes,
@@ -124,7 +132,7 @@ def main():
                                                         )
 
     # create data loaders for training and test set
-    train_loader = DataLoader(train_dataset, batch_size = wandb.config.batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size = wandb.config.batch_size, shuffle=True, drop_last = True)
     val_loader = DataLoader(val_dataset, batch_size = 128, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size = 128, shuffle=False)
 
