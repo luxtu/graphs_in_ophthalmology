@@ -3,7 +3,7 @@ import copy
 import json
 import pickle
 
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, cohen_kappa_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
 from models import graph_classifier, global_node_gnn
 from torch_geometric.loader import DataLoader
@@ -12,15 +12,13 @@ from utils import prep, dataprep_utils, train_utils
 import wandb
 from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
-# empty cuda cache
 
-# Define sweep config
-with open('training_configs/sweep_config_94d26b_split2.json', 'r') as file:
+with open('training_configs/sweep_config_94d26b.json', 'r') as file: # _split2_split2
     sweep_configuration = json.load(file)
 
 sweep_configuration["method"] = "random"
-sweep_configuration["name"] = "Selected sweep, repeat only heterogeneous edges, 2 splits, 94d26db, correct splits, fixed loader"
-sweep_id = wandb.sweep(sweep=sweep_configuration, project= "selected_sweep_repeat")
+sweep_configuration["name"] = "94d26db, corr features sweep, NO random, 0-1 normalization, splits 1,2,3,4,5"
+sweep_id = wandb.sweep(sweep=sweep_configuration, project= "good data, old model")
 # change the name of the sweep
 
 # loading data
@@ -51,6 +49,20 @@ with open("training_configs/feature_name_dict_new.json", "r") as file:
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
+#with open("training_configs/log_scale_dict.json", "r") as file:
+#    log_scale_dict = json.load(file)
+#
+#dataprep_utils.log_scaling(log_scale_dict,features_label_dict,[cv_dataset, final_test_dataset])
+
+# load the features to keep
+#with open("training_configs/included_features_rf_importance_corr_98.json", "r") as file:
+#    included_features = json.load(file)
+
+with open("training_configs/included_features_corr_95.json", "r") as file:
+    included_features = json.load(file)
+
+
+
 eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd"], 
                       "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]}
 if faz_node_bool:
@@ -66,26 +78,28 @@ homogeneous_conv_dict = {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv, "
 heterogeneous_conv_dict = {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv}
 activation_dict = {"relu":torch.nn.functional.relu, "leaky" : torch.nn.functional.leaky_relu, "elu":torch.nn.functional.elu}
 
-
-
 def main():
     #torch.autograd.set_detect_anomaly(True)
     run = wandb.init()
     #split = sweep_configuration["parameters"]["split"]["values"][0]
     split = wandb.config.split
-    train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0], use_full_cv = False)
     features_label_dict = copy.deepcopy(label_dict_full)
-    # get positions of features to eliminate and remove them from the feature label dict and the graphs
-    for key in eliminate_features.keys():
-        for feat in eliminate_features[key]:
-            idx = features_label_dict[key].index(feat)
-            features_label_dict[key].remove(feat)
-            for data in train_dataset:
-                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
-            for data in val_dataset:
-                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
-            for data in test_dataset:
-                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+    train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = sweep_configuration["parameters"]["faz_node"]["values"][0], use_full_cv = False, min_max=True)
+    dataprep_utils.eliminate_features(included_features, features_label_dict, [train_dataset, val_dataset, test_dataset])
+    #print(train_dataset[0])
+    #features_label_dict = copy.deepcopy(label_dict_full)
+    ## get positions of features to eliminate and remove them from the feature label dict and the graphs
+    #for key in eliminate_features.keys():
+    #    for feat in eliminate_features[key]:
+    #        idx = features_label_dict[key].index(feat)
+    #        features_label_dict[key].remove(feat)
+    #        for data in train_dataset:
+    #            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+    #        for data in val_dataset:
+    #            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+    #        for data in test_dataset:
+    #            data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     # class weight extraction
@@ -124,15 +138,12 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size = 64, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size = 64, shuffle=False)
 
-
-
     # weigthings for imbalanced classes 
     balanced_loss = torch.nn.CrossEntropyLoss(class_weights)
     weak_balanced_loss = torch.nn.CrossEntropyLoss(class_weights_weak)
     unbalanced_loss = torch.nn.CrossEntropyLoss()
 
     loss_dict = {"balanced": balanced_loss, "unbalanced": unbalanced_loss, "weak_balanced": weak_balanced_loss}
-
 
     classifier = graph_classifier.graphClassifierHetero_94d26db(model, loss_dict[wandb.config.class_weights], lr = wandb.config.lr, weight_decay =wandb.config.weight_decay, smooth_label_loss = wandb.config.smooth_label_loss) 
 
@@ -145,7 +156,6 @@ def main():
         res_dict, y_pred_softmax_val, y_true_val = train_utils.evaluate_model(classifier, val_loader, test_loader)
         train_acc = accuracy_score(y_true_train, y_prob_train.argmax(axis=1))
         train_bal_acc = balanced_accuracy_score(y_true_train, y_prob_train.argmax(axis=1))
-
         res_dict["train_acc"] = train_acc
         res_dict["train_bal_acc"] = train_bal_acc
         res_dict["loss"] = loss
