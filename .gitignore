@@ -16,3 +16,4 @@ env/
 explain_out/
 debug_notebooks/
 scripts/
+sweep_configs/
