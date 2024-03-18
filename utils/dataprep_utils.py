@@ -66,7 +66,7 @@ def mad(data, dim=None):
     return mad
 
 
-def hetero_graph_normalization_params(train_dataset, robust = False):
+def hetero_graph_standardization_params(train_dataset, robust = False):
     """ Extracts the mean and std of the node features from the dataset
 
     Paramters
@@ -104,7 +104,62 @@ def hetero_graph_normalization_params(train_dataset, robust = False):
 
     return node_mean_tensors, node_std_tensors
 
-def hetero_graph_normalization(dataset, node_mean_tensors, node_std_tensors):
+def hetero_graph_min_max_params(train_dataset, robust = False):
+    """ Extracts the min and max of the node features from the dataset
+
+    Paramters
+    ---------
+    train_dataset: An iterable of torch_geometric.data.Data objects
+
+    Returns
+    -------
+    node_min_tensors: A dictionary of the min of the node features
+    node_max_tensors: A dictionary of the max of the node features
+    """
+    try:
+        iterable = train_dataset.hetero_graph_list
+    except AttributeError:
+        iterable = train_dataset
+
+    node_tensors = {}
+    node_min_tensors = {}
+    node_max_tensors = {}
+    for key, val in iterable[0].x_dict.items():
+        node_tensors[key] = None
+
+    for data in iterable:
+        for key, val in data.x_dict.items():
+            node_tensors[key] = torch.cat([node_tensors[key], val]) if node_tensors[key] is not None else val
+
+    for key, val in node_tensors.items():
+        if robust:
+            node_min_tensors[key]  = torch.quantile(val, 0.25, dim =0)
+            node_max_tensors[key] = torch.quantile(val, 0.75, dim =0)
+        else:
+            node_min_tensors[key]  = torch.min(val, dim=0).values
+            node_max_tensors[key] = torch.max(val, dim=0).values
+
+    return node_min_tensors, node_max_tensors
+
+def hetero_graph_min_max_scaling(dataset, node_min_tensors, node_max_tensors):
+    """ Scales the node features in the dataset
+
+    Paramters
+    ---------
+    dataset: An iterable of torch_geometric.data.Data objects
+    node_min_tensors: A dictionary of the min of the node features
+    node_max_tensors: A dictionary of the max of the node features
+
+    Returns
+    -------
+    """
+    for data in dataset:
+        for key in data.x_dict.keys():
+            data.x_dict[key] -=  node_min_tensors[key]
+            data.x_dict[key] /= node_max_tensors[key] - node_min_tensors[key]
+
+
+def hetero_graph_standardization(dataset, node_mean_tensors, node_std_tensors):
 
     """ Normalizes the node features in the dataset
 
@@ -127,6 +182,11 @@ def hetero_graph_normalization(dataset, node_mean_tensors, node_std_tensors):
             # avoid division by zero
             #data.x_dict[key] /= node_std_tensors[key] + 1e-8
             data.x_dict[key] /= node_std_tensors[key]
+            # set values larger than 10 to 10
+            #data.x_dict[key] = torch.where(data.x_dict[key] > 10, torch.ones_like(data.x_dict[key]) * 10, data.x_dict[key])
+            ## set values smaller than -10 to -10
+            #data.x_dict[key] = torch.where(data.x_dict[key] < -10, torch.ones_like(data.x_dict[key]) * -10, data.x_dict[key])
+
 
 def add_virtual_node(dataset):
     """ Adds a virtual node to the dataset, that is connected to all other nodes and has 0 embeddings
@@ -231,7 +291,7 @@ def remove_label_noise(dataset, label_noise_dict):
     dataset.hetero_graph_list = list(dataset.hetero_graphs.values())
 
 
-def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, use_full_cv = False, robust = False):
+def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, use_full_cv = False, robust = False, min_max = False):
     """ Adjusts the datasets for the split, set the split, impute, normalize and add node features
 
     Paramters
@@ -277,14 +337,29 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, us
 
     # extract normalization parameters
     if use_full_cv:
-        node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(cv_dataset_cp, robust= robust)
+        #
+        if min_max:
+            node_min_tensors, node_max_tensors = hetero_graph_min_max_params(cv_dataset_cp, robust= robust)
+        else:
+            node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(cv_dataset_cp, robust= robust)
+        
     else:
-        node_mean_tensors, node_std_tensors = hetero_graph_normalization_params(train_dataset, robust= robust)
+        if min_max:
+            node_min_tensors, node_max_tensors = hetero_graph_min_max_params(train_dataset, robust= robust)
+        else:
+            node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(train_dataset, robust= robust)
+        #node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(train_dataset, robust= robust)
+        
+    if min_max:
+        hetero_graph_min_max_scaling(train_dataset, node_min_tensors, node_max_tensors)
+        hetero_graph_min_max_scaling(val_dataset, node_min_tensors, node_max_tensors)
+        hetero_graph_min_max_scaling(test_dataset, node_min_tensors, node_max_tensors)
+    else:
+        hetero_graph_standardization(train_dataset, node_mean_tensors, node_std_tensors)
+        hetero_graph_standardization(val_dataset, node_mean_tensors, node_std_tensors)
+        hetero_graph_standardization(test_dataset, node_mean_tensors, node_std_tensors)
+        
 
-    # data normalization
-    hetero_graph_normalization(train_dataset, node_mean_tensors, node_std_tensors)
-    hetero_graph_normalization(val_dataset, node_mean_tensors, node_std_tensors)
-    hetero_graph_normalization(test_dataset, node_mean_tensors, node_std_tensors)
 
     return train_dataset, val_dataset, test_dataset
 
@@ -315,3 +390,34 @@ def eliminate_features(included_features, features_label_dict, datasets):
             for dataset in datasets:
                 for data in dataset:
                     data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+
+
+def log_scaling(log_scale_dict, feature_label_dict, datasets):
+    
+    """ Applies log scaling to the features in the datasets
+
+    Paramters
+    ---------
+    log_scale_dict: A dictionary of the features that should be log scaled
+    feature_label_dict: A dictionary of the available features
+    datasets: An iterable of iterables of torch_geometric.data.Data objects
+
+    Returns
+    -------
+    """
+    for key in log_scale_dict.keys():
+        for feat in log_scale_dict[key]:
+            idx = feature_label_dict[key].index(feat)
+            for dataset in datasets:
+                for data in dataset:
+                    data[key].x[:, idx] = torch.log(data[key].x[:, idx] + 1)
+
+    # also need to adjust the dictionary of the graphs
+                    
+    for key in log_scale_dict.keys():
+        for feat in log_scale_dict[key]:
+            idx = feature_label_dict[key].index(feat)
+            for dataset in datasets:
+                for data in dataset.hetero_graphs.values():
+                    data[key].x[:, idx] = torch.log(data[key].x[:, idx] + 1)
+
