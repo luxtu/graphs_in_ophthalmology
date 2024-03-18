@@ -73,8 +73,30 @@ class RawDataExplainer():
             idx_y += 1
             faz_region_label = region_labels[idx_y,600]
         return faz_region_label
+    
+    def _get_one_hop_neighbors(self, edge_index, relevant_nodes):
+        """
+        Takes the edge indices and the relevant nodes and returns the one hop neighbors of the relevant nodes
+        """
 
-    def _heatmap_relevant_vessels(self, raw, relevant_vessels_pre, vvg_df_edges, explanations, graph, vvg_df_nodes, matched_list):
+        # get the one hop neighbors of the relevant nodes
+        one_hop_neighbors = []
+        for node in relevant_nodes:
+            # get the indices of the edges where the node is the source
+            source_edges = np.where(edge_index[0] == node)[0]
+            # get the target nodes of the source edges
+            target_nodes = edge_index[1][source_edges]
+            # append the target nodes to the one_hop_neighbors
+            one_hop_neighbors.append(target_nodes)
+        # flatten the list
+        one_hop_neighbors = np.concatenate(one_hop_neighbors)
+        # remove duplicates
+        one_hop_neighbors = np.unique(one_hop_neighbors)
+        return one_hop_neighbors
+        
+
+
+    def _heatmap_relevant_vessels(self, raw, relevant_vessels_pre, vvg_df_edges, explanations, graph, vvg_df_nodes, matched_list, one_hop_neighbors = None, only_positive = False):
         # for the vessels create a mask that containts the centerline of the relevant vessels
         # also store the positions of the center points on the relevant vessels
 
@@ -83,9 +105,15 @@ class RawDataExplainer():
         vessel_alphas = np.zeros_like(raw, dtype=np.float32)
         #extract the node positions from the graph
         node_positions = graph["graph_1"].pos.cpu().detach().numpy()
-        importance = explanations.node_mask_dict["graph_1"].abs().sum(dim=-1).cpu().detach().numpy()
+        # get the importance of the vessels
+        if only_positive:
+            importance = explanations.node_mask_dict["graph_1"].sum(dim=-1).cpu().detach().numpy()
+        else:
+            importance = explanations.node_mask_dict["graph_1"].abs().sum(dim=-1).cpu().detach().numpy()
         # get the positions of the relevant vessels
         relevant_vessels = np.where(relevant_vessels_pre)[0]
+        if one_hop_neighbors is not None:
+            relevant_vessels = np.concatenate((relevant_vessels, one_hop_neighbors))
         # get the center points of the relevant vessels
         center_points = node_positions[relevant_vessels]
         # get the importance of the relevant vessels
@@ -104,25 +132,11 @@ class RawDataExplainer():
             center_points_vvg.append(center_point)
         center_points_vvg = np.array(center_points_vvg)[:,:2]
 
-        # match the center points of the relevant vessels to the center points of the vvg
 
         # create a regions for every vessel in the vvgs
         image, seg = matched_list
-        # load the image
-        #image = Image.open(image_file)
-        ## turn the iamge into a numpy array
-        #try:
-        #    image = np.array(image)[:,:,0]
-        #except IndexError:
-        #    image = np.array(image)
-        ## load the seg
-        #seg = Image.open(seg_file)
-        # turn the seg into a numpy array
-        #seg = np.array(seg)
         # make seg binary
         seg = seg > 0
-        # get the ratio between the image size and the seg size
-        #image = transform.resize(image, seg.shape, order = 0, preserve_range = True)
 
         final_seg_label = np.zeros_like(seg, dtype = np.uint16)
         final_seg_label[seg!=0] = 1
@@ -153,7 +167,13 @@ class RawDataExplainer():
             # get the closest vessel in the vessel_vvg
             positions = vvg_df_edges["pos"].iloc[closest_vessel]
             frequent_label = {}
-            cl_center_points.append(positions[int(len(positions)/2)])
+            if one_hop_neighbors is not None:
+                # only add the centerline points if the vessel is not in the one_hop_neighbors
+                if i not in one_hop_neighbors:
+                    cl_center_points.append(positions[int(len(positions)/2)])
+
+            else:
+                cl_center_points.append(positions[int(len(positions)/2)])
             for pos in positions:
                 label = final_seg_label[int(pos[0]), int(pos[1])]
                 if label in frequent_label:
@@ -293,7 +313,7 @@ class RawDataExplainer():
         return regions, alphas
 
 
-    def _heatmap_relevant_regions(self, raw, seg, region_labels, faz_region_label, relevant_faz, df, pos, explanations):
+    def _heatmap_relevant_regions(self, raw, seg, region_labels, faz_region_label, relevant_faz, df, pos, explanations, only_positive = False):
         relevant_region_labels = []
         relevant_region_indices = []
         for i, position in enumerate(pos):
@@ -315,19 +335,21 @@ class RawDataExplainer():
         
 
         # get the importance of the relevant regions
-        importance_array = explanations.node_mask_dict["graph_2"].abs().sum(dim=-1).cpu().detach().numpy()
-        print("Region importance")
+        if only_positive:
+            importance_array = explanations.node_mask_dict["graph_2"].sum(dim=-1).cpu().detach().numpy()
+        else:
+            importance_array = explanations.node_mask_dict["graph_2"].abs().sum(dim=-1).cpu().detach().numpy()
         for i, label in enumerate(relevant_region_labels):
             importance = importance_array[relevant_region_indices[i]].item()
-            print(importance)
             #alphas[region_labels == label] = importance
             regions[region_labels == label] = importance
 
 
         if self.faz_node and relevant_faz is not None:
-            print("Faz importance")
-            importance = explanations.node_mask_dict["faz"].abs().sum(dim=-1).cpu().detach().numpy()[0].item()
-            print(importance)
+            if only_positive:
+                importance = explanations.node_mask_dict["faz"].sum(dim=-1).cpu().detach().numpy()[0].item()
+            else:
+                importance = explanations.node_mask_dict["faz"].abs().sum(dim=-1).cpu().detach().numpy()[0].item()
             #alphas[region_labels == faz_region_label] = importance
             regions[region_labels == faz_region_label] = importance
 
@@ -339,7 +361,7 @@ class RawDataExplainer():
         return regions, alphas
 
 
-    def create_explanation_image(self, explanation, hetero_graph,  graph_id, path, label_names = None, target = None, heatmap = False, explained_gradient = 0.95):
+    def create_explanation_image(self, explanation, hetero_graph,  graph_id, path, label_names = None, target = None, heatmap = False, explained_gradient = 0.95, only_positive = False, points = False):
         
         
         # extract the relevant segmentation, raw image and vvg
@@ -360,14 +382,35 @@ class RawDataExplainer():
         if "faz" in explanation.node_mask_dict.keys():
             self.faz_node = True
         # relevant nodes dict, getting the nodes above a certain threshold, includes all types of nodes
-        het_graph_rel_pos_dict  = torch_geom_explanation.identifiy_relevant_nodes(explanation,hetero_graph, faz_node=self.faz_node, explained_gradient= explained_gradient)
+        if isinstance(explained_gradient, float):
+            het_graph_rel_pos_dict  = torch_geom_explanation.identifiy_relevant_nodes(explanation,hetero_graph, faz_node=self.faz_node, explained_gradient= explained_gradient, only_positive = only_positive)
+        elif isinstance(explained_gradient, int):
+            het_graph_rel_pos_dict  = torch_geom_explanation.top_k_important_nodes(explanation,hetero_graph, faz_node=self.faz_node, top_k= explained_gradient, only_positive = only_positive)
+        elif explained_gradient == None:
+            het_graph_rel_pos_dict = {}
+            for key in hetero_graph.x_dict.keys():
+                het_graph_rel_pos_dict[key] = np.ones(hetero_graph[key].x.shape[0], dtype=bool)
+        else:
+            raise ValueError("explained_gradient must be either a float, an int or None")
 
         # extract the relevant vessels
         vvg_df_edges, vvg_df_nodes = vvg_loader.vvg_to_df(os.path.join(self.vvg_path, vvg_file))
+
+        # find the one-hop neighbors of the relevant vessels
+        one_hop_neighbors_bool = False
+        if one_hop_neighbors_bool:
+            one_hop_neighbors = self._get_one_hop_neighbors(hetero_graph[("graph_1", "to", "graph_1")].edge_index.cpu().detach().numpy(), np.where(het_graph_rel_pos_dict["graph_1"])[0])
+            # remove the relevant vessels from the one_hop_neighbors
+            one_hop_neighbors = np.setdiff1d(one_hop_neighbors, np.where(het_graph_rel_pos_dict["graph_1"])[0])
+
+
+
+        # rem
+
         
         # extract the relevant vessels, with a segmentation mask and the center points of the relevant vessels
         if heatmap:
-            cl_arr, cl_center_points, vessel_alphas = self._heatmap_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, explanation, hetero_graph, vvg_df_nodes, [raw, seg])
+            cl_arr, cl_center_points, vessel_alphas = self._heatmap_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, explanation, hetero_graph, vvg_df_nodes, [raw, seg], one_hop_neighbors = None, only_positive = only_positive)
         else:
             cl_arr, cl_center_points = self._color_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, )
 
@@ -388,9 +431,14 @@ class RawDataExplainer():
             df.index = np.arange(len(df))
             # check if the faz region is relevant
             relevant_faz = np.where(het_graph_rel_pos_dict["faz"])[0]
+            # check if the faz region is an empty array
+            if relevant_faz.size == 0:
+                faz_region_label = None
+                relevant_faz = None
         else:
             faz_region_label = None
             relevant_faz = None
+        print(relevant_faz)
 
         # extract relevant positions
         relevant_regions = np.where(het_graph_rel_pos_dict["graph_2"])[0]
@@ -398,7 +446,7 @@ class RawDataExplainer():
         pos = hetero_graph["graph_2"].pos.cpu().detach().numpy()
         pos = pos[relevant_regions]
         if heatmap:
-            regions, alphas = self._heatmap_relevant_regions(raw, seg, region_labels, faz_region_label, relevant_faz, df, pos, explanation)
+            regions, alphas = self._heatmap_relevant_regions(raw, seg, region_labels, faz_region_label, relevant_faz, df, pos, explanation, only_positive)
         else:
             regions, alphas = self._color_relevant_regions(raw, seg, region_labels, faz_region_label, relevant_faz, df, pos)
 
@@ -450,16 +498,17 @@ class RawDataExplainer():
 
 
         # plot the center of the relevant regions
-        ax[0].scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
-        ax[1].scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
+        if points:
+            ax[0].scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
+            ax[1].scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
 
         # check if cl_center_points is empty
-        if cl_center_points.size != 0:
+        if cl_center_points.size != 0 and points:
             ax[0].scatter(cl_center_points[:,1], cl_center_points[:,0], c="blue", s=15, alpha=1)
             ax[1].scatter(cl_center_points[:,1], cl_center_points[:,0], c="blue", s=15, alpha=1)
 
         # plot center of faz region if it is relevant
-        if self.faz_node and relevant_faz is not None:
+        if self.faz_node and relevant_faz is not None and points:
             # get the center of the faz region
             faz_pos = df_faz_node[["centroid-1", "centroid-0"]].values
             ax[0].scatter(faz_pos[0], faz_pos[1], c="red", s=15, alpha=1, marker="D")
