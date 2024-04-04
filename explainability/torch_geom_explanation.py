@@ -68,7 +68,7 @@ def _remove_inlay(hetero_graph, work_dict, node_key):
 
     return work_dict
 
-def _feature_importance_plot(explanation, path, features_label_dict, score, num_features = 5, only_positive = False):
+def _feature_importance_plot_each_type(explanation, path, features_label_dict, score, num_features = 5, only_positive = False):
 
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -118,7 +118,140 @@ def _feature_importance_plot(explanation, path, features_label_dict, score, num_
     plt.close()
 
 
-def _feature_importance_boxplot(hetero_graph, path, features_label_dict, het_graph_rel_pos_dict, score, num_features = 5, only_positive = False):
+def _feature_importance_plot(explanation, path, features_label_dict, score, num_features, only_positive):
+
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import numpy as np
+
+    node_typeto_proper_name = {"graph_1": "Vessel", "graph_2": "ICP Region", "faz": "FAZ"}
+    node_typeto_color_char = {"graph_1": "#CC0000", "graph_2": "#0075E8", "faz": "#007E01"}  #  #004080
+    all_feat_labels = []
+    for node_type in explanation.node_mask_dict.keys():
+        all_feat_labels += [
+            f'{node_typeto_proper_name[node_type]}: {label}' for label in features_label_dict[node_type]
+        ]
+    # also change the names in the features_label_dict
+    features_label_dict = {key: [f'{node_typeto_proper_name[key]}: {label}' for label in features_label_dict[key]] for key in features_label_dict.keys()}
+    
+
+    # single plot
+    fig, ax = plt.subplots(figsize=(10, 7))
+    # get the 5 most important features for each graph and plot them below each other
+
+    # get the max score for all graphs
+    max_score = 0
+    for node_type in explanation.node_mask_dict.keys():
+        max_score = max(max_score, np.abs(score[node_type]).max())
+
+    # plot the feature importance of all graphs in one plot
+    # get the scores for each graph
+    score_all = np.concatenate([score[node_type] for node_type in explanation.node_mask_dict.keys()])
+    df = pd.DataFrame({'score': score_all}, index=all_feat_labels)
+
+    if only_positive:
+        df_sorted = df.reindex(df.sort_values('score', ascending=False).index)
+        xlim = [0, max_score + 0.1*max_score]
+    else:
+        df_sorted = df.reindex(df.abs().sort_values('score', ascending=False).index)
+        xlim = [-max_score - 0.1*max_score, max_score+ 0.1*max_score]
+    df_sorted = df_sorted.head(num_features)
+
+    color_list = []
+    label_list = []
+    # get the top features, assign them a color according to the node type
+    for feature in df_sorted.index:
+        for node_type in explanation.node_mask_dict.keys():
+            if feature in features_label_dict[node_type]:
+                color_list.append(node_typeto_color_char[node_type])
+                label_list.append(node_typeto_proper_name[node_type])
+                break
+
+    #print(color_list)
+    # use the same xlim for all subplots
+    # get rid of the legend
+    fig, ax_out = plt.subplots(figsize=(10, 7))
+    ax_out.barh(df_sorted.index, df_sorted['score'], color = color_list)
+
+    #ax_out = df_sorted.plot(
+    #    kind='barh',
+    #    title='Feature importance',
+    #    ylabel='Feature label',
+    #    xlim= xlim,
+    #    legend=True,
+    #    ax = ax,
+    #    color = color_list,
+    #    label = label_list
+    #)
+    ax_out.invert_yaxis()
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
+
+
+def _feature_importance_boxplot(hetero_graph, path, features_label_dict, het_graph_rel_pos_dict, score, num_features , only_positive):
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    import numpy as np
+
+    # change the path by splitting it and adding _boxplot, split at the last dot
+    path = path.rsplit(".", 1)[0] + "_boxplot." + path.rsplit(".", 1)[1]
+
+    node_typeto_proper_name = {"graph_1": "Vessel", "graph_2": "ICP Area", "faz": "FAZ"}
+    all_feat_labels = []
+    for node_type in hetero_graph.x_dict.keys():
+        all_feat_labels += [
+            f'{node_typeto_proper_name[node_type]}: {label}' for label in features_label_dict[node_type]
+        ]
+    # change also the names in the features_label_dict
+    features_label_dict = {key: [f'{node_typeto_proper_name[key]}: {label}' for label in features_label_dict[key]] for key in features_label_dict.keys()}
+
+    # single plot
+    fig, axs = plt.subplots(figsize=(10, 7))
+    # get the most important features across all graphs
+    max_score = 0
+    for node_type in hetero_graph.x_dict.keys():
+        max_score = max(max_score, np.abs(score[node_type]).max())
+
+    # plot the feature importance of all graphs in one plot
+    # get the scores for each graph
+    score_all = np.concatenate([score[node_type] for node_type in hetero_graph.x_dict.keys()])
+    df = pd.DataFrame({'score': score_all}, index=all_feat_labels)
+
+    if only_positive:
+        df_sorted = df.reindex(df.sort_values('score', ascending=False).index)
+    else:
+        df_sorted = df.reindex(df.abs().sort_values('score', ascending=False).index)
+
+
+    # for each of the top features, get the values in the graph of the relevant nodes
+    top_features = df_sorted.head(num_features).index
+    feature_values = []
+    for feature in top_features:
+        for node_type in hetero_graph.x_dict.keys():
+            try:
+                feature_values.append(hetero_graph[node_type].x[het_graph_rel_pos_dict[node_type]][:, features_label_dict[node_type].index(feature)].cpu().detach().numpy())
+            except ValueError:
+                continue
+
+    #df = pd.DataFrame(feature_values)
+    # handle the case that there are different number of values for each feature, but there should still be a boxplot created
+    fig, ax = plt.subplots()
+    ax.boxplot(feature_values, vert = False)
+    # invert the y axis
+    ax.invert_yaxis()
+    ax.set_title('Feature importance')
+    ax.set_yticklabels(top_features)
+
+
+    plt.tight_layout()
+    plt.savefig(path)
+    plt.close()
+
+
+    
+
+def _feature_importance_boxplot_each_type(hetero_graph, path, features_label_dict, het_graph_rel_pos_dict, score, num_features, only_positive):
         
     import matplotlib.pyplot as plt
     import pandas as pd
@@ -160,8 +293,7 @@ def _feature_importance_boxplot(hetero_graph, path, features_label_dict, het_gra
         axs[i].set_title(node_typeto_proper_name[node_type])
 
         ax_out.invert_yaxis()
-    #plt.gca().invert_yaxis()
-    #ax.bar_label(container=ax.containers[0], label_type='edge')
+
     plt.tight_layout()
     plt.savefig(path)
     plt.close()
@@ -266,7 +398,7 @@ def _top_k_important_nodes(explanation_graph, hetero_graph, faz_node = False ,to
             het_graph_weight = explanation_graph.node_mask_dict[graph_name].abs().sum(dim=-1)
         het_graph_weight = het_graph_weight.cpu().detach().numpy()
         inlay_pos = (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,0] > 1100) & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,1] < 100)
-        het_graph_weight[inlay_pos] = 0
+        het_graph_weight[inlay_pos] = -5
     
         #concat the weights
         if graph_name == "graph_1":
@@ -286,8 +418,10 @@ def _top_k_important_nodes(explanation_graph, hetero_graph, faz_node = False ,to
         else:
             het_graph_rel_pos = explanation_graph.node_mask_dict[graph_name].abs().sum(dim=-1) >= threshold
         het_graph_rel_pos = het_graph_rel_pos.cpu().detach().numpy()
+        # print the number of relevant nodes
         # remove the inlay
-        het_graph_rel_pos = het_graph_rel_pos & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,0] < 1100) & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,1] > 100)
+        # het_graph_rel_pos = het_graph_rel_pos & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,0] < 1100) & (hetero_graph[graph_name].pos.cpu().detach().numpy()[:,1] > 100)
+        print(f"{graph_name}: {het_graph_rel_pos.sum()}")
         het_graph_rel_pos_dict[graph_name] = het_graph_rel_pos
     
     return het_graph_rel_pos_dict
@@ -369,9 +503,16 @@ def adaptive_important_nodes(explanation_graph, hetero_graph):
 
     return grad_dict, feature_dict
 
+def visualize_feature_importance(explanation, hetero_graph, path, features_label_dict, explained_gradient = None, only_positive = False, with_boxplot = False, num_features = 5, each_type = True):
+
+    if each_type:
+        _visualize_feature_importance_each_type(explanation, hetero_graph, path, features_label_dict, explained_gradient, only_positive, with_boxplot, num_features)
+    else:
+        _visualize_feature_importance(explanation, hetero_graph, path, features_label_dict, explained_gradient, only_positive, with_boxplot, num_features)
 
 
-def visualize_feature_importance(explanation, hetero_graph, path, features_label_dict, explained_gradient = None, only_positive = False, with_boxplot = False, num_features = 5):
+
+def _visualize_feature_importance(explanation, hetero_graph, path, features_label_dict, explained_gradient, only_positive, with_boxplot, num_features):
     """
     Wrapper for the pytorch geom function, since it does not include tight layout.
     If there is no threshold, all the nodes are considered for the importance score.
@@ -434,6 +575,74 @@ def visualize_feature_importance(explanation, hetero_graph, path, features_label
 
     if with_boxplot:
         _feature_importance_boxplot(hetero_graph, path, features_label_dict, het_graph_rel_pos_dict, score, num_features=num_features, only_positive = only_positive)
+
+
+    
+
+
+def _visualize_feature_importance_each_type(explanation, hetero_graph, path, features_label_dict, explained_gradient, only_positive, with_boxplot, num_features):
+    """
+    Wrapper for the pytorch geom function, since it does not include tight layout.
+    If there is no threshold, all the nodes are considered for the importance score.
+    If threshold is the string "adaptive", the threshold is calculated such that 95% of the total gradient is explained (without the gradients from nodes that contribute less than 0.05% to the total gradient)
+    """
+    import torch
+    import copy
+
+    # take abs for features in node mask to take into account negative values
+    abs_dict = {}
+    work_dict = {}
+    for key in explanation.node_mask_dict.keys():
+        if only_positive:
+            abs_dict[key] = copy.deepcopy(explanation.node_mask_dict[key])
+            abs_dict[key][abs_dict[key] < 0] = 0
+        else:
+            abs_dict[key] = copy.deepcopy(torch.abs(explanation.node_mask_dict[key]))
+        work_dict[key] = copy.deepcopy(explanation.node_mask_dict[key])
+
+    if explained_gradient is None:
+
+        # make the score a dictionary with the keys being the graph names
+        # score is the sum of the absolute values of the gradients for each feature for each nodetype
+        score = {}
+        for key in explanation.node_mask_dict.keys():
+            score[key] = work_dict[key].sum(dim=0).cpu().numpy()
+
+        het_graph_rel_pos_dict = {}
+        
+        for key in explanation.node_mask_dict.keys():
+            het_graph_rel_pos_dict[key] = torch.ones(explanation.node_mask_dict[key].sum(dim=-1).shape, dtype = torch.bool).cpu().detach().numpy()
+    elif isinstance(explained_gradient, float):
+        faz_node = False
+        if "faz" in explanation.node_mask_dict.keys():
+            faz_node = True
+        het_graph_rel_pos_dict = identifiy_relevant_nodes(explanation, hetero_graph, explained_gradient = explained_gradient, faz_node = faz_node, only_positive = only_positive)
+
+        # print number of relevant nodes
+        for key in explanation.node_mask_dict.keys():
+            print(f"{key}: {het_graph_rel_pos_dict[key].sum()}")
+        score = {}
+        for key in explanation.node_mask_dict.keys():
+            score[key] = work_dict[key][het_graph_rel_pos_dict[key]].sum(dim=0).cpu().numpy()
+        
+    elif isinstance(explained_gradient, int):
+        faz_node = False
+        if "faz" in explanation.node_mask_dict.keys():
+            faz_node = True
+        het_graph_rel_pos_dict = top_k_important_nodes(explanation, hetero_graph, faz_node = faz_node,top_k = explained_gradient, only_positive = only_positive)
+
+        # print number of relevant nodes
+        for key in explanation.node_mask_dict.keys():
+            print(f"{key}: {het_graph_rel_pos_dict[key].sum()}")
+        score = {}
+        for key in explanation.node_mask_dict.keys():
+            score[key] = work_dict[key][het_graph_rel_pos_dict[key]].sum(dim=0).cpu().numpy()
+
+
+    _feature_importance_plot_each_type(explanation, path, features_label_dict, score, num_features=num_features, only_positive = only_positive)
+
+    if with_boxplot:
+        _feature_importance_boxplot_each_type(hetero_graph, path, features_label_dict, het_graph_rel_pos_dict, score, num_features=num_features, only_positive = only_positive)
 
 
 
