@@ -506,7 +506,10 @@ def cl_pos_to_intensities(cl_pos_df, image, ratio):
             continue
 
         # get the intensities of the centerline
-        intensities = image[positions[:,0], positions[:,1], positions[:,2]]
+        try:    
+            intensities = image[positions[:,0], positions[:,1], positions[:,2]]
+        except IndexError:
+            intensities = image[positions[:,0], positions[:,1]]
 
         # calculate the average intensity
         avg_int[i,0] = np.mean(intensities)
