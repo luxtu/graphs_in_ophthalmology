@@ -96,7 +96,7 @@ class RawDataExplainer():
         
 
 
-    def _heatmap_relevant_vessels(self, raw, relevant_vessels_pre, vvg_df_edges, explanations, graph, vvg_df_nodes, matched_list, one_hop_neighbors = None, only_positive = False):
+    def _heatmap_relevant_vessels(self, raw, relevant_vessels_pre, vvg_df_edges, explanations, graph, vvg_df_nodes, matched_list, one_hop_neighbors = None, only_positive = False, intensity_value = None):
         # for the vessels create a mask that containts the centerline of the relevant vessels
         # also store the positions of the center points on the relevant vessels
 
@@ -183,7 +183,10 @@ class RawDataExplainer():
             # get the most frequent label, by the number of occurences
             max_label = max(frequent_label, key=frequent_label.get)
             # set the cl_arr_value to the importance of the vessel
-            cl_arr[final_seg_label == max_label] = relevant_importance[i]
+            if intensity_value is not None:
+                cl_arr[final_seg_label == max_label] = intensity_value
+            else:
+                cl_arr[final_seg_label == max_label] = relevant_importance[i]
             vessel_alphas[final_seg_label == max_label] = 0.7
         
         cl_center_points = np.array(cl_center_points)
@@ -313,7 +316,7 @@ class RawDataExplainer():
         return regions, alphas
 
 
-    def _heatmap_relevant_regions(self, raw, seg, region_labels, faz_region_label, relevant_faz, df, pos, explanations, only_positive = False):
+    def _heatmap_relevant_regions(self, raw, seg, region_labels, faz_region_label, relevant_faz, df, pos, explanations, only_positive = False, intensity_value = None):
         relevant_region_labels = []
         relevant_region_indices = []
         for i, position in enumerate(pos):
@@ -342,7 +345,10 @@ class RawDataExplainer():
         for i, label in enumerate(relevant_region_labels):
             importance = importance_array[relevant_region_indices[i]].item()
             #alphas[region_labels == label] = importance
-            regions[region_labels == label] = importance
+            if intensity_value is not None:
+                regions[region_labels == label] = intensity_value
+            else:
+                regions[region_labels == label] = importance
 
 
         if self.faz_node and relevant_faz is not None:
@@ -351,17 +357,19 @@ class RawDataExplainer():
             else:
                 importance = explanations.node_mask_dict["faz"].abs().sum(dim=-1).cpu().detach().numpy()[0].item()
             #alphas[region_labels == faz_region_label] = importance
-            regions[region_labels == faz_region_label] = importance
+            if intensity_value is not None:
+                regions[region_labels == faz_region_label] = 0.001
+            else:
+                regions[region_labels == faz_region_label] = importance
 
         alphas[alphas == 0] = 0
         alphas[seg!=0] = 0
-
-        alphas[regions!=0] = 0.3
+        alphas[regions!=0] = 0.5
         
         return regions, alphas
 
 
-    def create_explanation_image(self, explanation, hetero_graph,  graph_id, path, label_names = None, target = None, heatmap = False, explained_gradient = 0.95, only_positive = False, points = False):
+    def create_explanation_image(self, explanation, hetero_graph,  graph_id, path, label_names = None, target = None, heatmap = False, explained_gradient = 0.95, only_positive = False, points = False, intensity_value= None):
         
         
         # extract the relevant segmentation, raw image and vvg
@@ -410,9 +418,9 @@ class RawDataExplainer():
         
         # extract the relevant vessels, with a segmentation mask and the center points of the relevant vessels
         if heatmap:
-            cl_arr, cl_center_points, vessel_alphas = self._heatmap_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, explanation, hetero_graph, vvg_df_nodes, [raw, seg], one_hop_neighbors = None, only_positive = only_positive)
+            cl_arr, cl_center_points, vessel_alphas = self._heatmap_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, explanation, hetero_graph, vvg_df_nodes, [raw, seg], one_hop_neighbors = None, only_positive = only_positive, intensity_value = intensity_value)
         else:
-            cl_arr, cl_center_points = self._color_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges, )
+            cl_arr, cl_center_points = self._color_relevant_vessels(raw, het_graph_rel_pos_dict["graph_1"], vvg_df_edges)
 
 
         # extract the relevant regions
@@ -446,7 +454,7 @@ class RawDataExplainer():
         pos = hetero_graph["graph_2"].pos.cpu().detach().numpy()
         pos = pos[relevant_regions]
         if heatmap:
-            regions, alphas = self._heatmap_relevant_regions(raw, seg, region_labels, faz_region_label, relevant_faz, df, pos, explanation, only_positive)
+            regions, alphas = self._heatmap_relevant_regions(raw, seg, region_labels, faz_region_label, relevant_faz, df, pos, explanation, only_positive, intensity_value = intensity_value)
         else:
             regions, alphas = self._color_relevant_regions(raw, seg, region_labels, faz_region_label, relevant_faz, df, pos)
 
@@ -454,6 +462,39 @@ class RawDataExplainer():
 
 
 
+
+        
+
+        # separately plot the raw image and the segmentation
+        # create two seaprate figures
+            
+        # create the combined image
+        #self.create_combined_image(raw, seg, cl_arr, regions, alphas, cl_center_points, df_faz_node, relevant_faz, path, label_names, target, heatmap, points, pos, hetero_graph, intensity_value = intensity_value)
+            
+
+        # create the intensity image
+        # remove .png from the path
+        path = path[:-4]
+        intensity_path = path + "_intensity.png"
+
+        self.create_intensity_image(raw, cl_arr, regions, alphas, cl_center_points, df_faz_node, relevant_faz, intensity_path, label_names, target, points, pos, hetero_graph,vessel_alphas, intensity_value = intensity_value)
+
+        # create the segmentation image
+        seg_path = path + "_seg.png"
+
+        self.create_segmentation_image(raw, seg, cl_arr, regions, alphas, cl_center_points, df_faz_node, relevant_faz, seg_path, label_names, target, points, pos, hetero_graph, intensity_value)
+
+
+
+            
+        
+            
+
+            
+        
+        
+    def create_combined_image(self, raw, seg, cl_arr, regions, alphas, cl_center_points, df_faz_node, relevant_faz, path, label_names, target, heatmap, points, pos, hetero_graph, vessel_alphas, intensity_value = None) :
+        
         fig, ax  = plt.subplots(1,2, figsize=(20,10))
         # plotting the raw image 
         # scal the alpha values between 0 and 1
@@ -472,8 +513,13 @@ class RawDataExplainer():
 
             # use the cl_arr and regions as independent grad cam masks on the raw image
             ax[0].imshow(raw, alpha = 0.8, cmap = "Greys_r")
-            ax[0].imshow(regions, alpha = alphas,  cmap="jet", vmin=0, vmax=1) #, alpha = alphas, , cmap="jet"
-            ax[0].imshow(cl_arr,  alpha = vessel_alphas,  cmap="jet", vmin=0, vmax=1) 
+            if intensity_value is not None:
+                ax[0].imshow(cl_arr, alpha = vessel_alphas, cmap="OrRd", vmin=0, vmax=1.1)
+                ax[0].imshow(regions, alpha = alphas, cmap="ocean", vmin=0, vmax=2)
+            
+            else:
+                ax[0].imshow(cl_arr,  alpha = vessel_alphas,  cmap="jet", vmin=0, vmax=1) 
+                ax[0].imshow(regions, alpha = alphas,  cmap="jet", vmin=0, vmax=1) #, alpha = alphas, , cmap="jet"
 
             # creatae alpha mask with 1 where regions and 0 anywhere else
             alphas = np.zeros_like(raw, dtype=np.float32)
@@ -484,8 +530,13 @@ class RawDataExplainer():
             
             # plotting the segmentation
             ax[1].imshow(seg, cmap="Greys_r")
-            ax[1].imshow(regions, alpha = alphas, cmap="jet", vmin=0, vmax=1)
-            ax[1].imshow(cl_arr, alpha = vessel_alphas, cmap="jet", vmin=0, vmax=1)
+            if intensity_value is not None:
+                ax[1].imshow(cl_arr, alpha = vessel_alphas, cmap="OrRd", vmin=0, vmax=1.1)
+                ax[1].imshow(regions, alpha = alphas, cmap="ocean", vmin=0, vmax=2)
+            else:
+                ax[1].imshow(cl_arr, alpha = vessel_alphas, cmap="jet", vmin=0, vmax=1)
+                ax[1].imshow(regions, alpha = alphas, cmap="jet", vmin=0, vmax=1)
+
 
         else:
             ax[0].imshow(raw, alpha = alphas, cmap="gray")
@@ -499,11 +550,15 @@ class RawDataExplainer():
 
         # plot the center of the relevant regions
         if points:
+            # print the number of relevant regions
+            print(f"Number of relevant regions: {len(pos)}")
             ax[0].scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
             ax[1].scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
 
         # check if cl_center_points is empty
         if cl_center_points.size != 0 and points:
+            # print the number of relevant vessels
+            print(f"Number of relevant vessels: {len(cl_center_points)}")
             ax[0].scatter(cl_center_points[:,1], cl_center_points[:,0], c="blue", s=15, alpha=1)
             ax[1].scatter(cl_center_points[:,1], cl_center_points[:,0], c="blue", s=15, alpha=1)
 
@@ -523,10 +578,146 @@ class RawDataExplainer():
 
             ax[1].text(0.6, 0.98, textstr, transform=ax[1].transAxes, fontsize=16,
                 verticalalignment='top', bbox=dict(boxstyle='square', facecolor='grey', alpha=1))
+    
 
         if path is not None:
+            for i, a in enumerate(ax):
+                a.axis("off")
+                a.set_aspect("equal")
+                extent = a.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                a.figure.savefig(path + f"_{i}.png", bbox_inches= extent, pad_inches=0)
+
+            
             plt.tight_layout()
             plt.savefig(path)
-            plt.close()
+            plt.close("all")
         else:
             return ax
+
+
+
+    def create_intensity_image(self, raw, cl_arr, regions, alphas, cl_center_points, df_faz_node, relevant_faz, path, label_names, target, points, pos, hetero_graph, vessel_alphas, intensity_value = None):
+
+        cl_arr = cl_arr/cl_arr.max()
+        regions = regions/regions.max()
+        #alphas = alphas/alphas.max()
+        # normalize the raw image
+        raw = raw - raw.min()
+        raw = raw/raw.max()
+
+        h, w = raw.shape
+        figsize = (w/100, h/100)
+
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.axis("off")
+
+
+        # use the cl_arr and regions as independent grad cam masks on the raw image
+        ax.imshow(raw, alpha = 1, cmap = "Greys_r")
+        if intensity_value is not None:
+            ax.imshow(cl_arr, alpha = vessel_alphas, cmap="OrRd", vmin=0, vmax=1.1)
+            ax.imshow(regions, alpha = alphas, cmap="ocean", vmin=0, vmax=2)
+        else:
+            ax.imshow(cl_arr,  alpha = vessel_alphas,  cmap="jet", vmin=0, vmax=1) 
+            ax.imshow(regions, alpha = alphas,  cmap="jet", vmin=0, vmax=1) #, alpha = alphas, , cmap="jet"
+
+            # creatae alpha mask with 1 where regions and 0 anywhere else
+            alphas = np.zeros_like(raw, dtype=np.float32)
+            alphas[regions!=0] = 1
+            # do the same for the vessel alphas
+            vessel_alphas = np.zeros_like(raw, dtype=np.float32)
+            vessel_alphas[cl_arr!=0] = 1
+            
+        if points:
+            # print the number of relevant regions
+            print(f"Number of relevant regions: {len(pos)}")
+            ax.scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
+
+            # check if cl_center_points is empty
+            if cl_center_points.size != 0 and points:
+                # print the number of relevant vessels
+                print(f"Number of relevant vessels: {len(cl_center_points)}")
+                ax.scatter(cl_center_points[:,1], cl_center_points[:,0], c="blue", s=15, alpha=1)
+
+            # plot center of faz region if it is relevant
+            if self.faz_node and relevant_faz is not None and points:
+                # get the center of the faz region
+                faz_pos = df_faz_node[["centroid-1", "centroid-0"]].values
+                ax.scatter(faz_pos[0], faz_pos[1], c="red", s=15, alpha=1, marker="D")
+
+
+            #if label_names and target is not None:
+            #    textstr = '\n'.join((
+            #        "True Label: %s" % (label_names[hetero_graph.y[0].item()], ),
+            #        "Predicted Label: %s" % (label_names[target], )))
+            #    plt.text(0.6, 0.98, textstr, transform=plt.transAxes, fontsize=16,
+            #        verticalalignment='top', bbox=dict(boxstyle='square', facecolor='grey', alpha=1))
+
+        if path is not None:
+            fig.savefig(path)
+            plt.close("all")
+
+
+
+    def create_segmentation_image(self, raw, seg, cl_arr, regions, alphas, cl_center_points, df_faz_node, relevant_faz, path, label_names, target, points, pos, hetero_graph, intensity_value = None):
+
+        cl_arr = cl_arr/cl_arr.max()
+        regions = regions/regions.max()
+        #alphas = alphas/alphas.max()
+        # normalize the raw image
+        raw = raw - raw.min()
+        raw = raw/raw.max()
+
+        # creatae alpha mask with 1 where regions and 0 anywhere else
+        alphas = np.zeros_like(raw, dtype=np.float32)
+        alphas[regions!=0] = 1
+        # do the same for the vessel alphas
+        vessel_alphas = np.zeros_like(raw, dtype=np.float32)
+        vessel_alphas[cl_arr!=0] = 1
+
+        h, w = raw.shape
+        figsize = (w/100, h/100)
+
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.axis("off")
+
+            
+        # plotting the segmentation
+        ax.imshow(seg, cmap="Greys_r")
+        if intensity_value is not None:
+            ax.imshow(cl_arr, alpha = vessel_alphas, cmap="OrRd", vmin=0, vmax=1.1)
+            ax.imshow(regions, alpha = alphas, cmap="ocean", vmin=0, vmax=2)
+        else:
+            ax.imshow(cl_arr, alpha = vessel_alphas, cmap="jet", vmin=0, vmax=1)
+            ax.imshow(regions, alpha = alphas, cmap="jet", vmin=0, vmax=1)
+
+        if points:
+            # print the number of relevant regions
+            print(f"Number of relevant regions: {len(pos)}")
+            ax.scatter(pos[:,1], pos[:,0], c="orange", s=15, alpha=1, marker = "s")
+
+            # check if cl_center_points is empty
+            if cl_center_points.size != 0 and points:
+                # print the number of relevant vessels
+                print(f"Number of relevant vessels: {len(cl_center_points)}")
+                ax.scatter(cl_center_points[:,1], cl_center_points[:,0], c="blue", s=15, alpha=1)
+
+            # plot center of faz region if it is relevant
+            if self.faz_node and relevant_faz is not None and points:
+                # get the center of the faz region
+                faz_pos = df_faz_node[["centroid-1", "centroid-0"]].values
+                ax.scatter(faz_pos[0], faz_pos[1], c="red", s=15, alpha=1, marker="D")
+
+
+            #if label_names and target is not None:
+            #    textstr = '\n'.join((
+            #        "True Label: %s" % (label_names[hetero_graph.y[0].item()], ),
+            #        "Predicted Label: %s" % (label_names[target], )))
+            #    plt.text(0.6, 0.98, textstr, transform=plt.transAxes, fontsize=16,
+            #        verticalalignment='top', bbox=dict(boxstyle='square', facecolor='grey', alpha=1))
+
+        if path is not None:
+            fig.savefig(path)
+            plt.close("all")
