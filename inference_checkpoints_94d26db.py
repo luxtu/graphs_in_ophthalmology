@@ -11,6 +11,7 @@ from torch_geometric.loader import DataLoader
 import pandas as pd
 import numpy as np
 from sklearn.metrics import classification_report, accuracy_score, balanced_accuracy_score, cohen_kappa_score
+import time
 
 
 check_point_folder = "../data/checkpoints_94d26db_final_27022024" 
@@ -106,6 +107,12 @@ for chekpoint_file, run_id in zip(check_point_files, run_ids):
     print(split)
     train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = True, use_full_cv = False, min_max=False)
 
+    # put the datasets on the gpu
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    train_dataset.to(device)
+    #val_dataset.to(device)
+    #test_dataset.to(device)
+
     # delete all the edges to check what effect they have on the prediction
     #for data in test_dataset:
     #    for edge_type in data.edge_index_dict.keys():
@@ -129,7 +136,6 @@ for chekpoint_file, run_id in zip(check_point_files, run_ids):
     for key in features_label_dict.keys():
         print(key, len(features_label_dict[key]))
     
-    exit()
 
 
     # get positions of features to eliminate and remove them from the feature label dict and the graphs
@@ -146,6 +152,18 @@ for chekpoint_file, run_id in zip(check_point_files, run_ids):
 
     irrelevant_loss = torch.nn.CrossEntropyLoss()
     clf = graph_classifier.graphClassifierHetero_94d26db(model, irrelevant_loss) 
+
+    train_loader = DataLoader(train_dataset, batch_size = 16, shuffle=True)
+
+    # run 100 epochs of training and check the time it takes
+
+    start = time.time()
+    print("Start training")
+    for epoch in range(1, 100 + 1):
+        loss, y_prob_train, y_true_train, _  = clf.train(train_loader)
+    end = time.time()
+    print(f"Training time: {end - start}")
+    exit()
 
     test_loader_set = DataLoader(test_dataset[:4], batch_size = 4, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size = 64, shuffle=False)
