@@ -73,6 +73,7 @@ def _feature_importance_plot_each_type(explanation, path, features_label_dict, s
     import matplotlib.pyplot as plt
     import pandas as pd
     import numpy as np
+    import os
 
     node_typeto_proper_name = {"graph_1": "Vessel", "graph_2": "ICP Region", "faz": "FAZ"}
     all_feat_labels = []
@@ -113,6 +114,13 @@ def _feature_importance_plot_each_type(explanation, path, features_label_dict, s
         ax_out.invert_yaxis()
     #plt.gca().invert_yaxis()
     #ax.bar_label(container=ax.containers[0], label_type='edge')
+    # check if the path exists otherwise create it
+    directory = os.path.dirname(path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
+
     plt.tight_layout()
     plt.savefig(path)
     plt.close()
@@ -123,6 +131,7 @@ def _feature_importance_plot(explanation, path, features_label_dict, score, num_
     import matplotlib.pyplot as plt
     import pandas as pd
     import numpy as np
+    import os
 
     node_typeto_proper_name = {"graph_1": "Vessel", "graph_2": "ICP Region", "faz": "FAZ"}
     node_typeto_color_char = {"graph_1": "#CC0000", "graph_2": "#0075E8", "faz": "#007E01"}  #  #004080
@@ -184,6 +193,12 @@ def _feature_importance_plot(explanation, path, features_label_dict, score, num_
     #    label = label_list
     #)
     ax_out.invert_yaxis()
+    # check if the path exists otherwise create it
+    directory = os.path.dirname(path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
+
     plt.tight_layout()
     plt.savefig(path)
     plt.close()
@@ -193,6 +208,7 @@ def _feature_importance_boxplot(hetero_graph, path, features_label_dict, het_gra
     import matplotlib.pyplot as plt
     import pandas as pd
     import numpy as np
+    import os
 
     # change the path by splitting it and adding _boxplot, split at the last dot
     path = path.rsplit(".", 1)[0] + "_boxplot." + path.rsplit(".", 1)[1]
@@ -243,6 +259,10 @@ def _feature_importance_boxplot(hetero_graph, path, features_label_dict, het_gra
     ax.set_title('Feature importance')
     ax.set_yticklabels(top_features)
 
+    # check if the path exists otherwise create it
+    directory = os.path.dirname(path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
     plt.tight_layout()
     plt.savefig(path)
@@ -255,6 +275,7 @@ def _feature_importance_boxplot_each_type(hetero_graph, path, features_label_dic
         
     import matplotlib.pyplot as plt
     import pandas as pd
+    import os
 
     # change the path by splitting it and adding _boxplot, split at the last dot
     path = path.rsplit(".", 1)[0] + "_boxplot." + path.rsplit(".", 1)[1]
@@ -293,6 +314,10 @@ def _feature_importance_boxplot_each_type(hetero_graph, path, features_label_dic
         axs[i].set_title(node_typeto_proper_name[node_type])
 
         ax_out.invert_yaxis()
+    # check if the path exists otherwise create it
+    directory = os.path.dirname(path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
     plt.tight_layout()
     plt.savefig(path)
@@ -651,9 +676,9 @@ def _visualize_feature_importance_each_type(explanation, hetero_graph, path, fea
 def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold = 0.0, edge_threshold = 0.0, edges = True, faz_node = False, ax = None):
 
     import matplotlib.pyplot as plt
-    import pandas as pd
     import torch
     import numpy as np
+    import os
 
     graph_1_name = "graph_1"
     graph_2_name = "graph_2"
@@ -803,6 +828,10 @@ def visualize_relevant_subgraph(explanation_graph, hetero_graph, path, threshold
 
 
     if path is not None:
+            # check if the path exists otherwise create it
+        directory = os.path.dirname(path)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
         plt.tight_layout()
         plt.savefig(path)
         plt.close()
@@ -816,6 +845,7 @@ def visualize_node_importance_histogram(explanation_graph, path, faz_node = Fals
     import matplotlib.pyplot as plt
     import numpy as np
     import copy
+    import os
 
     graph_1_name = "graph_1"
     graph_2_name = "graph_2"
@@ -899,6 +929,12 @@ def visualize_node_importance_histogram(explanation_graph, path, faz_node = Fals
 
     #plt.xticks(x_ticks_old, x_ticks_new)
     plt.yscale('log')
+
+    # check if the path exists otherwise create it
+    directory = os.path.dirname(path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     plt.tight_layout()
     plt.savefig(path)
     plt.close()
@@ -908,6 +944,7 @@ def integrate_gradients_heatmap(explanation_graph, hetero_graph, path, faz_node 
 
     import matplotlib.pyplot as plt
     from graph_plotting import graph_2D
+    import os
     fig, ax = plt.subplots()
     # add titles for each subplot in the figu
     # add legend to the figure that assigns the square marker ("s") to the intercapillary region and the circle marker to the vessel region    
@@ -933,6 +970,11 @@ def integrate_gradients_heatmap(explanation_graph, hetero_graph, path, faz_node 
     else:
         plotter2d.plot_graph_2D(hetero_graph ,edges= False, pred_val_dict = importance_dict, ax = ax)
     fig.legend()
+    # check if the path exists otherwise create it
+    directory = os.path.dirname(path)
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
     plt.tight_layout()
     plt.savefig(path)
     plt.close()

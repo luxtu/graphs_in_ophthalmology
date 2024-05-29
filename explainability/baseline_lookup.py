@@ -87,10 +87,24 @@ class Baseline_Lookup():
 
         return avg
 
-        
+    
+    def get_k_nearst_neighbors_median_features(self, node_type, pos, k):
+            
+        dist, ind = self.trees[node_type].query(pos, k=k)
+        median = torch.median(self.nodes[node_type][ind, :], dim=1).values
+        # axis = 0 are all the baseline nodes
+        # axis = 1 are the neighbors of the baseline nodes
+        # axis = 2 are the features of the nodes
+
+        # set all values >1 to 1
+        #median[median > 1] = 1
+        # set all values <-1 to -1
+        #median[median < -1] = -1
+    
+        return median
     
 
-    def get_k_nearst_neighbors_avg_features_quantile_correct(self, node_type, pos, k, lower_quantile = 0.1, upper_quantile = 0.9):
+    def get_k_nearst_neighbors_avg_features_quantile(self, node_type, pos, k, lower_quantile = 0.1, upper_quantile = 0.9):
 
         # query the spatially k nearest neighbors for each node
         dist, ind = self.trees[node_type].query(pos, k=k)
@@ -113,10 +127,39 @@ class Baseline_Lookup():
         avg = avg.mean(dim=1)
 
         # set all values >1 to 1 and all values <-1 to -1
-        # for integrated gradients to work the baseline should be close to 0 
         avg[avg > 1] = 1
         avg[avg < -1] = -1
 
         return avg
 
 
+    def get_baselines(self, baseline_type, data, k=100):
+        device = data.x_dict["graph_1"].device
+
+        if baseline_type == "zero":
+            baseline_graph_1 = torch.zeros_like(data.x_dict["graph_1"]).unsqueeze(0)
+            baseline_graph_2 = torch.zeros_like(data.x_dict["graph_2"]).unsqueeze(0)
+            baseline_faz = torch.zeros_like(data.x_dict["faz"], device= device).unsqueeze(0)
+
+        elif baseline_type == "lookup_quantile": #get_k_nearst_neighbors_avg_features
+            baseline_graph_1 = self.get_k_nearst_neighbors_avg_features_quantile("graph_1", data["graph_1"].pos.cpu().numpy(), k).unsqueeze(0)
+            baseline_graph_2 = self.get_k_nearst_neighbors_avg_features_quantile("graph_2", data["graph_2"].pos.cpu().numpy(), k).unsqueeze(0)
+            baseline_faz = torch.zeros_like(data.x_dict["faz"], device= device).unsqueeze(0)
+
+        elif baseline_type == "lookup_median":
+            baseline_graph_1 = self.get_k_nearst_neighbors_median_features("graph_1", data["graph_1"].pos.cpu().numpy(), k).unsqueeze(0)
+            baseline_graph_2 = self.get_k_nearst_neighbors_median_features("graph_2", data["graph_2"].pos.cpu().numpy(), k).unsqueeze(0)
+            baseline_faz = torch.zeros_like(data.x_dict["faz"], device= device).unsqueeze(0)
+        
+        elif baseline_type == "lookup_mean":
+            baseline_graph_1 = self.get_k_nearst_neighbors_avg_features("graph_1", data["graph_1"].pos.cpu().numpy(), k).unsqueeze(0)
+            baseline_graph_2 = self.get_k_nearst_neighbors_avg_features("graph_2", data["graph_2"].pos.cpu().numpy(), k).unsqueeze(0)
+            baseline_faz = torch.zeros_like(data.x_dict["faz"], device= device).unsqueeze(0)
+
+
+        else:
+            raise ValueError("Baseline type not recognized")
+        
+        baselines = (baseline_graph_1, baseline_graph_2, baseline_faz)
+
+        return baselines

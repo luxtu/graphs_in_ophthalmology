@@ -1,0 +1,134 @@
+import os
+import json
+import torch
+from utils import dataprep_utils
+import pickle
+import copy
+from models import global_node_gnn
+from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
+from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
+
+def get_param_count(state_dict):
+
+    # count the number of parameters, only count the initialized parameters
+    param_sum = 0
+    ct = 0
+    for key in state_dict.keys():
+        try:
+            param_sum += state_dict[key].numel()
+        except ValueError:
+            ct +=1
+
+    return param_sum, ct
+
+
+
+def load_state_dict_and_model_config(checkpoint_folder, run_id):
+    """
+    Load the state dict into the model
+    """
+    # extract the checkpoint files
+    check_point_files = [f for f in os.listdir(checkpoint_folder) if f.endswith(".pt")]
+
+    # find the json file that contains the model configuration
+    json_files = [f for f in os.listdir(checkpoint_folder) if f.endswith(".json")]
+
+    for json_file in json_files:
+        if run_id in json_file:
+            # load the json file
+            model_config = json.load(open(os.path.join(checkpoint_folder, json_file), "r"))
+            break
+    # load the model
+    state_dict = torch.load(os.path.join(checkpoint_folder, [f for f in check_point_files if run_id in f][0]))
+    return state_dict, model_config
+
+def load_private_datasets(split, faz_node_bool):
+    """
+    Load the datasets
+    """
+    data_type = "DCP"
+
+    mode_cv = "cv"
+    mode_final_test = "final_test"
+
+    # load the datasets
+    cv_pickle_processed = f"../data/{data_type}_{mode_cv}_selected_sweep_repeat_v2.pkl"
+    final_test_pickle_processed = f"../data/{data_type}_{mode_final_test}_selected_sweep_repeat_v2.pkl" 
+    # load the pickled datasets
+    with open(cv_pickle_processed, "rb") as file:
+        cv_dataset = pickle.load(file)
+
+    with open(final_test_pickle_processed, "rb") as file:
+        final_test_dataset = pickle.load(file)
+
+    train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = True)
+
+    with open("training_configs/feature_name_dict_new.json", "r") as file:
+        label_dict_full = json.load(file)
+
+    features_label_dict = copy.deepcopy(label_dict_full)
+
+
+    # eliminate features with extremely high correlation to other features
+    eliminate_features = {"graph_1":["num_voxels","hasNodeAtSampleBorder", "maxRadiusAvg", "maxRadiusStd"], 
+                          "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]}
+
+
+    if faz_node_bool:
+        eliminate_features["faz"] = ["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]
+
+
+
+
+    # get positions of features to eliminate and remove them from the feature label dict and the graphs
+    for key in eliminate_features.keys():
+        for feat in eliminate_features[key]:
+            idx = features_label_dict[key].index(feat)
+            features_label_dict[key].remove(feat)
+            for data in train_dataset:
+                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+            for data in val_dataset:
+                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+            for data in test_dataset:
+                data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+
+
+
+    # add the new features to the feature label dict
+    features_label_dict["graph_1"] = features_label_dict["graph_1"][:-1] + ["cl_mean", "cl_std", "q25", "q75"] + ["degree"] 
+    features_label_dict["graph_2"] = features_label_dict["graph_2"][:-1] + ["q25", "q75", "std"] + ["degree"] 
+    features_label_dict["faz"] = features_label_dict["faz"]
+
+
+    return train_dataset, val_dataset, test_dataset, features_label_dict
+
+
+def create_model(model_config, node_types, out_channels):
+    """
+    Create the model
+    """
+    agg_mode_dict = {"mean": global_mean_pool, "max": global_max_pool, "add": global_add_pool, "add_max": [global_add_pool, global_max_pool], "max_mean": [global_max_pool, global_mean_pool], "add_mean": [global_add_pool, global_mean_pool]}
+    homogeneous_conv_dict = {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv, "gcn" : GCNConv}
+    heterogeneous_conv_dict = {"gat": GATConv, "sage":SAGEConv, "graph" : GraphConv}
+    activation_dict = {"relu":torch.nn.functional.relu, "leaky" : torch.nn.functional.leaky_relu, "elu":torch.nn.functional.elu}
+
+
+    model = global_node_gnn.GNN_global_node(hidden_channels= model_config["parameters"]["hidden_channels"], # global_node_gnn.GNN_global_node
+                                                    out_channels= out_channels,
+                                                    num_layers= model_config["parameters"]["num_layers"],
+                                                    dropout = 0.1, 
+                                                    aggregation_mode= agg_mode_dict[model_config["parameters"]["aggregation_mode"]], 
+                                                    node_types = node_types,
+                                                    num_pre_processing_layers = model_config["parameters"]["pre_layers"],
+                                                    num_post_processing_layers = model_config["parameters"]["post_layers"],
+                                                    batch_norm = model_config["parameters"]["batch_norm"],
+                                                    conv_aggr = model_config["parameters"]["conv_aggr"],
+                                                    hetero_conns = model_config["parameters"]["hetero_conns"],
+                                                    homogeneous_conv= homogeneous_conv_dict[model_config["parameters"]["homogeneous_conv"]],
+                                                    heterogeneous_conv= heterogeneous_conv_dict[model_config["parameters"]["heterogeneous_conv"]],
+                                                    activation= activation_dict[model_config["parameters"]["activation"]],
+                                                    faz_node = model_config["parameters"]["faz_node"],
+                                                    start_rep = model_config["parameters"]["start_rep"],
+                                                    aggr_faz = model_config["parameters"]["aggr_faz"],
+                                                    )
+    return model

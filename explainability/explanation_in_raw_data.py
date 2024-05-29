@@ -589,6 +589,10 @@ class RawDataExplainer():
 
             
             plt.tight_layout()
+                # check if the path exists otherwise create it
+            directory = os.path.dirname(path)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
             plt.savefig(path)
             plt.close("all")
         else:
@@ -655,6 +659,10 @@ class RawDataExplainer():
             #        verticalalignment='top', bbox=dict(boxstyle='square', facecolor='grey', alpha=1))
 
         if path is not None:
+                # check if the path exists otherwise create it
+            directory = os.path.dirname(path)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
             fig.savefig(path)
             plt.close("all")
 
@@ -719,5 +727,9 @@ class RawDataExplainer():
             #        verticalalignment='top', bbox=dict(boxstyle='square', facecolor='grey', alpha=1))
 
         if path is not None:
+                # check if the path exists otherwise create it
+            directory = os.path.dirname(path)
+            if not os.path.exists(directory):
+                os.makedirs(directory)
             fig.savefig(path)
             plt.close("all")
