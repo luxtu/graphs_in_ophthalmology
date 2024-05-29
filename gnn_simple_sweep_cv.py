@@ -6,7 +6,7 @@ import json
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, cohen_kappa_score
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
-from models import graph_classifier, hetero_gnn, global_node_gnn, hierarchical_gnn, spatial_pooling_gnn, baseline_gnn
+from models import graph_classifier, homogeneous_gnn
 from torch_geometric.loader import DataLoader
 
 from sklearn.metrics import roc_auc_score, roc_curve, auc
@@ -191,7 +191,7 @@ def main():
     #torch.autograd.set_detect_anomaly(True)
     run = wandb.init()
 
-    model = baseline_gnn.Baseline_GNN(hidden_channels= wandb.config.hidden_channels,
+    model = homogeneous_gnn.Homogeneous_GNN(hidden_channels= wandb.config.hidden_channels,
                                                         out_channels= num_classes,
                                                         num_layers= wandb.config.num_layers, 
                                                         dropout = wandb.config.dropout, 

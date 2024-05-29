@@ -1,10 +1,9 @@
 import torch
 #from torch.nn import Linear
 import torch.nn.functional as F
-from torch_geometric.nn import HeteroConv, GCNConv, SAGEConv, GraphConv, Linear, GATConv, EdgeConv, TopKPooling
-from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
+from torch_geometric.nn import GCNConv, Linear, TopKPooling
 
-class Baseline_GNN(torch.nn.Module):
+class Homogeneous_GNN(torch.nn.Module):
     def __init__(self, hidden_channels, 
                  out_channels, 
                  num_layers, 
@@ -83,13 +82,7 @@ class Baseline_GNN(torch.nn.Module):
             self.convs.append(conv)
 
 
-
-
-
     def forward(self, x, edge_index, batch,  **kwargs):
-
-
-
        ########################################
         #pre processing
         for i in range(len(self.pre_processing_lin_layers)):
@@ -142,8 +135,7 @@ class Baseline_GNN(torch.nn.Module):
 
 
 
-
-class Baseline_GNN_Pooling(torch.nn.Module):
+class Homogeneous_GNN_Pooling(torch.nn.Module):
     def __init__(self, hidden_channels, 
                  out_channels, 
                  num_layers, 
@@ -217,20 +209,13 @@ class Baseline_GNN_Pooling(torch.nn.Module):
         self.num_layers = num_layers
         self.convs = torch.nn.ModuleList()
         self.poolings = torch.nn.ModuleList()
-        #self.han_convs = torch.nn.ModuleList()
         for _ in range(num_layers):
             conv = homogeneous_conv(-1, hidden_channels)
             self.convs.append(conv)
             self.poolings.append(TopKPooling(hidden_channels, ratio = 0.5))
 
 
-
-
-
     def forward(self, x, edge_index, batch,  **kwargs):
-
-
-
        ########################################
         #pre processing
         for i in range(len(self.pre_processing_lin_layers)):

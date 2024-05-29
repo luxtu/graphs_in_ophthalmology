@@ -4,7 +4,7 @@ from utils import prep, dataprep_utils, train_utils
 import json
 import copy
 import torch
-from models import graph_classifier, global_node_gnn
+from models import graph_classifier, heterogeneous_gnn
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
 from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 from torch_geometric.loader import DataLoader
@@ -82,7 +82,7 @@ for chekpoint_file, run_id in zip(check_point_files, run_ids):
     node_types = ["graph_1", "graph_2"]
     # load the model
     out_channels = 3
-    model = global_node_gnn.GNN_global_node(hidden_channels= sweep_configuration["parameters"]["hidden_channels"],
+    model = heterogeneous_gnn.Heterogeneous_GNN(hidden_channels= sweep_configuration["parameters"]["hidden_channels"],
                                                         out_channels= out_channels,
                                                         num_layers= sweep_configuration["parameters"]["num_layers"],
                                                         dropout = 0, 

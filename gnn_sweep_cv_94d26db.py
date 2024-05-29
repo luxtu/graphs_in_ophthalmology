@@ -5,7 +5,7 @@ import pickle
 
 from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
-from models import graph_classifier, global_node_gnn
+from models import graph_classifier, heterogeneous_gnn
 from torch_geometric.loader import DataLoader
 
 from utils import prep, dataprep_utils, train_utils
@@ -113,7 +113,7 @@ def main():
     val_dataset.to(device)
     test_dataset.to(device)
 
-    model = global_node_gnn.GNN_global_node(hidden_channels= wandb.config.hidden_channels,
+    model = heterogeneous_gnn.Heterogeneous_GNN(hidden_channels= wandb.config.hidden_channels,
                                                         out_channels= num_classes,
                                                         num_layers= wandb.config.num_layers, 
                                                         dropout = wandb.config.dropout, 

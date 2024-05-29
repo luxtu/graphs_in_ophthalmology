@@ -4,7 +4,7 @@ import torch
 from utils import dataprep_utils
 import pickle
 import copy
-from models import global_node_gnn
+from models import heterogeneous_gnn
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
 from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
@@ -113,7 +113,7 @@ def create_model(model_config, node_types, out_channels):
     activation_dict = {"relu":torch.nn.functional.relu, "leaky" : torch.nn.functional.leaky_relu, "elu":torch.nn.functional.elu}
 
 
-    model = global_node_gnn.GNN_global_node(hidden_channels= model_config["parameters"]["hidden_channels"], # global_node_gnn.GNN_global_node
+    model = heterogeneous_gnn.Heterogeneous_GNN(hidden_channels= model_config["parameters"]["hidden_channels"], # heterogeneous_gnn.Heterogeneous_GNN
                                                     out_channels= out_channels,
                                                     num_layers= model_config["parameters"]["num_layers"],
                                                     dropout = 0.1, 
