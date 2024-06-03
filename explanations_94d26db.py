@@ -7,7 +7,7 @@ from torch_geometric.loader import DataLoader
 from explainability import (
     baseline_lookup,
     explanation_in_raw_data,
-    torch_geom_explanation,
+    sample_feature_importance,
 )
 from models import graph_classifier
 from utils import explain_inference_utils
@@ -84,7 +84,7 @@ gnnexp_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 lookup_tree = baseline_lookup.Baseline_Lookup(
     [train_dataset], node_types, device=device
 )
-save_path = "../data/explain_94d26db_2905_zero/" + run_id
+save_path = "../data/explain_94d26db_debug/" + run_id
 baseline_type = "zero"
 
 
@@ -134,49 +134,52 @@ for idx, data in enumerate(gnnexp_loader):
         data.x_dict, data.edge_index_dict, target=target, batch_dict=data.batch_dict
     )
 
+    sample_explainer = sample_feature_importance.SampleFeatureImportance(
+        explanation, data, features_label_dict
+    )
+
     only_positive = True
+    each_type = False
 
     # feature importance using the 20 most important nodes
     explained_gradient = 20
-    importance_threshold_path = f"{save_path}/feature_importance/feature_importance_top_{explained_gradient}_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes_new_not_each_type.png"
-    torch_geom_explanation.visualize_feature_importance(
-        explanation,
-        data,
-        importance_threshold_path,
-        features_label_dict,
+    importance_top_k_path = f"{save_path}/feature_importance/feature_importance_top_{explained_gradient}_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes_new_not_each_type.png"
+
+    sample_explainer.visualize_feature_importance(
+        path=importance_top_k_path,
         explained_gradient=explained_gradient,
         only_positive=only_positive,
         with_boxplot=True,
         num_features=5,
-        each_type=False,
+        each_type=each_type,
     )
 
     # feature importance using all nodes
     importance_path = f"{save_path}/feature_importance/feature_importance_{data_label}_{explain_type}_{baseline_type}_{run_id}_no_threshold_quantile_attributes_new_not_each_type.png"
-    torch_geom_explanation.visualize_feature_importance(
-        explanation,
-        data,
-        importance_path,
-        features_label_dict,
+
+    sample_explainer.visualize_feature_importance(
+        path=importance_path,
         explained_gradient=None,
         only_positive=only_positive,
         with_boxplot=True,
-        num_features=8,
-        each_type=False,
+        num_features=5,
+        each_type=each_type,
     )
+
+    # creates a histogram of the node importance
+    histogram_path = f"{save_path}/histogram/node_hist_noabs_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes_new.png"
+
+    sample_explainer.visualize_node_importance_histogram(histogram_path, abs=False)
+
+    # heatmap_test
+    heatmap_path = f"{save_path}/heatmap/heatmap_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes_new.png"
+    sample_explainer.attribution_heatmap(heatmap_path)
 
     # plot the full graph
     # graph_2D.HeteroGraphPlotter2D().plot_graph_2D_faz(data, edges= True, path = f"{save_path}/fullgraph/fullgraph_{data_label}_{explain_type}.png")
 
-    # creates a histogram of the node importance
-    torch_geom_explanation.visualize_node_importance_histogram(
-        explanation,
-        f"{save_path}/histogram/node_hist_noabs_{data_label}_{explain_type}_{baseline_type}_{run_id}_quantile_attributes_new.png",
-        faz_node=faz_node_bool,
-        abs=False,
-    )
 
-    # generate overlay image
+    # generate overlay image with top 20 nodes
     data_type = "DCP"
     segmentation_path = f"../data/{data_type}_seg"
     json_path = f"../data/{data_type}_json"
@@ -202,6 +205,7 @@ for idx, data in enumerate(gnnexp_loader):
         points=False,
         intensity_value=0.1,
     )
+
     break
 
 # %%
