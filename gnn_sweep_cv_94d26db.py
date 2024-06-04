@@ -13,7 +13,7 @@ import wandb
 from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
 
-with open('training_configs/sweep_config_94d26b.json', 'r') as file: # _split2_split2
+with open('feature_configs/sweep_config_94d26b.json', 'r') as file: # _split2_split2
     sweep_configuration = json.load(file)
 
 sweep_configuration["method"] = "random"
@@ -44,21 +44,21 @@ with open(final_test_pickle_processed, "rb") as file:
     final_test_dataset = pickle.load(file)
 
 
-with open("training_configs/feature_name_dict_new.json", "r") as file:
+with open("feature_configs/feature_name_dict_new.json", "r") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
-#with open("training_configs/log_scale_dict.json", "r") as file:
+#with open("feature_configs/log_scale_dict.json", "r") as file:
 #    log_scale_dict = json.load(file)
 #
 #dataprep_utils.log_scaling(log_scale_dict,features_label_dict,[cv_dataset, final_test_dataset])
 
 # load the features to keep
-#with open("training_configs/included_features_rf_importance_corr_98.json", "r") as file:
+#with open("feature_configs/included_features_rf_importance_corr_98.json", "r") as file:
 #    included_features = json.load(file)
 
-with open("training_configs/included_features_corr_95.json", "r") as file:
+with open("feature_configs/included_features_corr_95.json", "r") as file:
     included_features = json.load(file)
 
 

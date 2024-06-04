@@ -49,9 +49,10 @@ else:
 
 # %%
 # load the data
-train_dataset, val_dataset, test_dataset, features_label_dict = (
+dataset_list, features_label_dict = (
     explain_inference_utils.load_private_datasets(split, faz_node_bool)
 )
+train_dataset, val_dataset, test_dataset = dataset_list
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 train_dataset.to(device)

@@ -131,7 +131,7 @@ for chekpoint_file, run_id in zip(check_point_files, run_ids):
     print(test_dataset[0])
     
 
-    with open("training_configs/feature_name_dict_new.json", "r") as file:
+    with open("feature_configs/feature_name_dict_new.json", "r") as file:
         label_dict_full = json.load(file)
         #features_label_dict = json.load(file)
     features_label_dict = copy.deepcopy(label_dict_full)

@@ -100,7 +100,7 @@ def load_private_datasets(split, faz_node_bool):
 
 
 def delete_highly_correlated_features(dataset_list, faz_node_bool):
-    with open("training_configs/feature_name_dict_new.json", "r") as file:
+    with open("feature_configs/feature_name_dict_new.json", "r") as file:
         label_dict_full = json.load(file)
     features_label_dict = copy.deepcopy(label_dict_full)
 
