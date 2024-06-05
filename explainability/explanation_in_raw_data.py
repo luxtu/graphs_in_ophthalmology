@@ -24,27 +24,21 @@ class RawDataExplainer:
         self.segmentations = os.listdir(self.segmentation_path)
         self.vvgs = os.listdir(self.vvg_path)
 
-        # print(f"Found {len(self.vvgs)} vvgs")
-        # print(f"Found {len(self.segmentations)} segmentations")
-        # print(f"Found {len(self.raw_images)} raw images")
-        #
-        # print('#'*50)
-
         # extract all files from vvg files that end with .json or .json.gz
         self.vvgs = [
             file
             for file in self.vvgs
             if file.endswith(".json") or file.endswith(".json.gz")
         ]
-        # print(f"Found {len(self.raw_images)} vvgs with correct file ending")
+
         # extract all files from seg files that end with .png
         self.segmentations = [
             file for file in self.segmentations if file.endswith(".png")
         ]
-        # print(f"Found {len(self.segmentations)} segmentations with correct file ending")
+
         # extract all files from raw image files that end with .png
         self.raw_images = [file for file in self.raw_images if file.endswith(".png")]
-        # print(f"Found {len(self.raw_images)} raw_images with correct file ending")
+
 
     def _process_files(self, graph_id):
         seg_file = [file for file in self.segmentations if graph_id in file]
@@ -219,49 +213,7 @@ class RawDataExplainer:
 
         return cl_arr, cl_center_points, vessel_alphas
 
-        """
-        importance_array = explanations.node_mask_dict["graph_1"].abs().sum(dim=-1).cpu().detach().numpy()
-        cl_arr = np.zeros_like(raw, dtype=np.float32)
-        vessel_alphas = np.zeros_like(raw, dtype=np.float32)
-        cl_center_points = []
-        print("Vessel importance")
-        for i, cl in enumerate(vvg_df_edges["pos"]):
-            # only add the centerline of the relevant vessels
-            if i in relevant_vessels:
-                # extract the centerpoints of the relevant vessels
-                # extract the importance of the relevant vessels from the explanation
-                importance = importance_array[i].item()
-                
-                print(importance)
-                cl_center_points.append(cl[int(len(cl)/2)])
-                for pos in cl:
-                    cl_arr[int(pos[0]), int(pos[1])] = importance
-                    vessel_alphas[int(pos[0]), int(pos[1])] = 0.7
-                    # also color the neighboring pixels if they exist
-                    # create indices for the neighboring pixels
-                    neigh_pix = np.array([[-1,0], [1,0], [0,-1], [0,1]])
-                    # include the 2nd order neighbors
-                    neigh_pix = np.concatenate((neigh_pix, np.array([[-1,-1], [-1,1], [1,-1], [1,1]])))
-                    # include the 3rd order neighbors
-                    neigh_pix = np.concatenate((neigh_pix, np.array([[-2,0], [2,0], [0,-2], [0,2]])))
-                    # convert pos to int
-                    pos = np.array([int(pos[0]), int(pos[1])]).astype(int)
-                    for neigb_pos in neigh_pix:
-                        neigb_pos += pos
-                    neigh_pix = neigh_pix.astype(int)
-                    # check if the neighboring pixels are in the image
-                    neigh_pix = neigh_pix[(neigh_pix[:,0] >= 0) & (neigh_pix[:,0] < cl_arr.shape[0]) & (neigh_pix[:,1] >= 0) & (neigh_pix[:,1] < cl_arr.shape[1])]
-                    # set the neighboring pixels to 
-                    cl_arr[neigh_pix[:,0], neigh_pix[:,1]] = importance
-                    vessel_alphas[neigh_pix[:,0], neigh_pix[:,1]] = 0.7
 
-        cl_center_points = np.array(cl_center_points)
-        # assue that 2 dimensions are always returned
-        if len(cl_center_points.shape) == 1:
-            cl_center_points = np.expand_dims(cl_center_points, axis=0)
-
-        return cl_arr, cl_center_points, vessel_alphas 
-        """
 
     def _color_relevant_vessels(self, raw, relevant_vessels_pre, vvg_df_edges):
         # for the vessels create a mask that containts the centerline of the relevant vessels
@@ -510,7 +462,6 @@ class RawDataExplainer:
                 one_hop_neighbors, np.where(het_graph_rel_pos_dict["graph_1"])[0]
             )
 
-        # rem
 
         # extract the relevant vessels, with a segmentation mask and the center points of the relevant vessels
         if heatmap:
@@ -590,9 +541,6 @@ class RawDataExplainer:
             regions, alphas = self._color_relevant_regions(
                 raw, seg, region_labels, faz_region_label, relevant_faz, df, pos
             )
-
-        # separately plot the raw image and the segmentation
-        # create two seaprate figures
 
         # create the combined image
         # self.create_combined_image(raw, seg, cl_arr, regions, alphas, cl_center_points, df_faz_node, relevant_faz, path, label_names, target, heatmap, points, pos, hetero_graph, intensity_value = intensity_value)

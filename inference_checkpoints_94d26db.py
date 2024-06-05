@@ -76,9 +76,6 @@ df_report = pd.DataFrame()
 df_metrics = pd.DataFrame()
 
 
-# shufffle check_point_files and run_ids the same way
-# check_point_files, run_ids = zip(*sorted(zip(check_point_files, run_ids)))
-
 # %% load the model and evaluate the performance
 for run_id in sorted(run_ids):
     state_dict, model_config = explain_inference_utils.load_state_dict_and_model_config(
