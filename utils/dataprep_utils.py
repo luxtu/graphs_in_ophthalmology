@@ -2,8 +2,9 @@ import torch
 import copy
 from collections import Counter
 
-def get_class_weights(train_labels, verbose = False):
-    """ Calculates the class weights for the dataset
+
+def get_class_weights(train_labels, verbose=False):
+    """Calculates the class weights for the dataset
 
     Paramters
     ---------
@@ -20,7 +21,10 @@ def get_class_weights(train_labels, verbose = False):
 
     # Calculate the class weights
     total_samples = len(train_labels)
-    class_weights = [total_samples / (len(label_distribution) * count) for label, count in label_distribution.items()]
+    class_weights = [
+        total_samples / (len(label_distribution) * count)
+        for label, count in label_distribution.items()
+    ]
 
     if verbose:
         # Print or use the label distribution as needed
@@ -34,8 +38,9 @@ def get_class_weights(train_labels, verbose = False):
 
     return class_weights
 
+
 def hetero_graph_imputation(dataset):
-    """ Performs imputation on the dataset
+    """Performs imputation on the dataset
 
     Paramters
     ---------
@@ -48,12 +53,12 @@ def hetero_graph_imputation(dataset):
         # check if the .x and .edge_index contains nan values
         for key, val in data.x_dict.items():
             if torch.any(torch.isnan(val)):
-                #print("nan values in x")
+                # print("nan values in x")
                 nan_pos = torch.where(torch.isnan(val))
                 # imputation with mean value of feature
                 val[nan_pos] = 0
             if torch.any(torch.isinf(val)):
-                #print("inf values in x")
+                # print("inf values in x")
                 inf_pos = torch.where(torch.isinf(val))
                 val[inf_pos] = 0
 
@@ -66,8 +71,8 @@ def mad(data, dim=None):
     return mad
 
 
-def hetero_graph_standardization_params(train_dataset, robust = False):
-    """ Extracts the mean and std of the node features from the dataset
+def hetero_graph_standardization_params(train_dataset, robust=False):
+    """Extracts the mean and std of the node features from the dataset
 
     Paramters
     ---------
@@ -91,21 +96,25 @@ def hetero_graph_standardization_params(train_dataset, robust = False):
 
     for data in iterable:
         for key, val in data.x_dict.items():
-            node_tensors[key] = torch.cat([node_tensors[key], val]) if node_tensors[key] is not None else val
+            node_tensors[key] = (
+                torch.cat([node_tensors[key], val])
+                if node_tensors[key] is not None
+                else val
+            )
 
     for key, val in node_tensors.items():
         if robust:
-            node_mean_tensors[key]  = torch.median(val, dim =0).values 
-            node_std_tensors[key] = mad(val, dim =0)
+            node_mean_tensors[key] = torch.median(val, dim=0).values
+            node_std_tensors[key] = mad(val, dim=0)
         else:
-            node_mean_tensors[key]  = torch.mean(val, dim=0)
+            node_mean_tensors[key] = torch.mean(val, dim=0)
             node_std_tensors[key] = torch.std(val, dim=0)
-
 
     return node_mean_tensors, node_std_tensors
 
-def hetero_graph_min_max_params(train_dataset, robust = False):
-    """ Extracts the min and max of the node features from the dataset
+
+def hetero_graph_min_max_params(train_dataset, robust=False):
+    """Extracts the min and max of the node features from the dataset
 
     Paramters
     ---------
@@ -129,20 +138,25 @@ def hetero_graph_min_max_params(train_dataset, robust = False):
 
     for data in iterable:
         for key, val in data.x_dict.items():
-            node_tensors[key] = torch.cat([node_tensors[key], val]) if node_tensors[key] is not None else val
+            node_tensors[key] = (
+                torch.cat([node_tensors[key], val])
+                if node_tensors[key] is not None
+                else val
+            )
 
     for key, val in node_tensors.items():
         if robust:
-            node_min_tensors[key]  = torch.quantile(val, 0.25, dim =0)
-            node_max_tensors[key] = torch.quantile(val, 0.75, dim =0)
+            node_min_tensors[key] = torch.quantile(val, 0.25, dim=0)
+            node_max_tensors[key] = torch.quantile(val, 0.75, dim=0)
         else:
-            node_min_tensors[key]  = torch.min(val, dim=0).values
+            node_min_tensors[key] = torch.min(val, dim=0).values
             node_max_tensors[key] = torch.max(val, dim=0).values
 
     return node_min_tensors, node_max_tensors
 
+
 def hetero_graph_min_max_scaling(dataset, node_min_tensors, node_max_tensors):
-    """ Scales the node features in the dataset
+    """Scales the node features in the dataset
 
     Paramters
     ---------
@@ -155,13 +169,12 @@ def hetero_graph_min_max_scaling(dataset, node_min_tensors, node_max_tensors):
     """
     for data in dataset:
         for key in data.x_dict.keys():
-            data.x_dict[key] -=  node_min_tensors[key]
+            data.x_dict[key] -= node_min_tensors[key]
             data.x_dict[key] /= node_max_tensors[key] - node_min_tensors[key]
 
 
 def hetero_graph_standardization(dataset, node_mean_tensors, node_std_tensors):
-
-    """ Normalizes the node features in the dataset
+    """Normalizes the node features in the dataset
 
     Paramters
     ---------
@@ -174,22 +187,26 @@ def hetero_graph_standardization(dataset, node_mean_tensors, node_std_tensors):
     """
 
     for key in node_std_tensors.keys():
-        node_std_tensors[key] = torch.where(node_std_tensors[key] == 0, torch.ones_like(node_std_tensors[key]), node_std_tensors[key])
+        node_std_tensors[key] = torch.where(
+            node_std_tensors[key] == 0,
+            torch.ones_like(node_std_tensors[key]),
+            node_std_tensors[key],
+        )
 
     for data in dataset:
         for key in data.x_dict.keys():
-            data.x_dict[key] -=  node_mean_tensors[key]
+            data.x_dict[key] -= node_mean_tensors[key]
             # avoid division by zero
-            #data.x_dict[key] /= node_std_tensors[key] + 1e-8
+            # data.x_dict[key] /= node_std_tensors[key] + 1e-8
             data.x_dict[key] /= node_std_tensors[key]
             # set values larger than 10 to 10
-            #data.x_dict[key] = torch.where(data.x_dict[key] > 10, torch.ones_like(data.x_dict[key]) * 10, data.x_dict[key])
+            # data.x_dict[key] = torch.where(data.x_dict[key] > 10, torch.ones_like(data.x_dict[key]) * 10, data.x_dict[key])
             ## set values smaller than -10 to -10
-            #data.x_dict[key] = torch.where(data.x_dict[key] < -10, torch.ones_like(data.x_dict[key]) * -10, data.x_dict[key])
+            # data.x_dict[key] = torch.where(data.x_dict[key] < -10, torch.ones_like(data.x_dict[key]) * -10, data.x_dict[key])
 
 
 def add_virtual_node(dataset):
-    """ Adds a virtual node to the dataset, that is connected to all other nodes and has 0 embeddings
+    """Adds a virtual node to the dataset, that is connected to all other nodes and has 0 embeddings
 
     Paramters
     ---------
@@ -200,22 +217,30 @@ def add_virtual_node(dataset):
     """
 
     for data in dataset:
-    # add a virtual node that connects to all other nodes, with 0 embeddings
+        # add a virtual node that connects to all other nodes, with 0 embeddings
         data["global"].x = torch.zeros((1, 64)).float()
         for key in data.x_dict.keys():
             # connect the virtual node to all other nodes
 
-        
-            data[("global", "to", key)].edge_index = torch.zeros((2, data.x_dict[key].shape[0])).long()
-            data[("global", "to", key)].edge_index[0,:] = 0
-            data[("global", "to", key)].edge_index[1,:] = torch.arange(data.x_dict[key].shape[0])
+            data[("global", "to", key)].edge_index = torch.zeros(
+                (2, data.x_dict[key].shape[0])
+            ).long()
+            data[("global", "to", key)].edge_index[0, :] = 0
+            data[("global", "to", key)].edge_index[1, :] = torch.arange(
+                data.x_dict[key].shape[0]
+            )
 
-            data[(key, "rev_to", "global")].edge_index = torch.zeros((2, data.x_dict[key].shape[0])).long()
-            data[(key, "rev_to", "global")].edge_index[0,:] = torch.arange(data.x_dict[key].shape[0])
-            data[(key, "rev_to", "global")].edge_index[1,:] = 0
+            data[(key, "rev_to", "global")].edge_index = torch.zeros(
+                (2, data.x_dict[key].shape[0])
+            ).long()
+            data[(key, "rev_to", "global")].edge_index[0, :] = torch.arange(
+                data.x_dict[key].shape[0]
+            )
+            data[(key, "rev_to", "global")].edge_index[1, :] = 0
+
 
 def add_node_features(dataset, node_types):
-    """ Adds the node degrees to the node features in the dataset
+    """Adds the node degrees to the node features in the dataset
 
     Paramters
     ---------
@@ -227,24 +252,34 @@ def add_node_features(dataset, node_types):
     """
     for data in dataset:
         if len(node_types) == 2:
-            heter_node_degrees_1, heter_node_degrees_2 = calculate_node_degrees(data.edge_index_dict[(node_types[0], "to", node_types[1])], data.x_dict[node_types[0]].shape[0], data.x_dict[node_types[1]].shape[0])
+            heter_node_degrees_1, heter_node_degrees_2 = calculate_node_degrees(
+                data.edge_index_dict[(node_types[0], "to", node_types[1])],
+                data.x_dict[node_types[0]].shape[0],
+                data.x_dict[node_types[1]].shape[0],
+            )
             heter_node_degrees_1 = heter_node_degrees_1.unsqueeze(1).float()
             heter_node_degrees_2 = heter_node_degrees_2.unsqueeze(1).float()
 
         for i, key in enumerate(node_types):
-            node_degrees = calculate_node_degrees(data.edge_index_dict[(key, "to", key)], data.x_dict[key].shape[0])
+            node_degrees = calculate_node_degrees(
+                data.edge_index_dict[(key, "to", key)], data.x_dict[key].shape[0]
+            )
             node_degrees = node_degrees.unsqueeze(1).float()
             if len(node_types) == 2:
                 if i == 0:
-                    data[key].x = torch.cat((data.x_dict[key], node_degrees, heter_node_degrees_1), dim=1)
+                    data[key].x = torch.cat(
+                        (data.x_dict[key], node_degrees, heter_node_degrees_1), dim=1
+                    )
                 else:
-                    data[key].x = torch.cat((data.x_dict[key], node_degrees, heter_node_degrees_2), dim=1)
+                    data[key].x = torch.cat(
+                        (data.x_dict[key], node_degrees, heter_node_degrees_2), dim=1
+                    )
             else:
                 data[key].x = torch.cat((data.x_dict[key], node_degrees), dim=1)
 
 
 def calculate_node_degrees(edge_index, num_nodes, num_nodes_2=None):
-    """ Calculates the degrees of the nodes in the graph
+    """Calculates the degrees of the nodes in the graph
 
     Paramters
     ---------
@@ -262,19 +297,19 @@ def calculate_node_degrees(edge_index, num_nodes, num_nodes_2=None):
         raise ValueError("edge_index should have two rows.")
 
     if num_nodes_2 is not None:
-        degrees = torch.bincount(edge_index[0], minlength= num_nodes)
-        degrees_2 = torch.bincount(edge_index[1], minlength= num_nodes_2)
+        degrees = torch.bincount(edge_index[0], minlength=num_nodes)
+        degrees_2 = torch.bincount(edge_index[1], minlength=num_nodes_2)
 
         return degrees, degrees_2
     else:
-        degrees = torch.bincount(edge_index[0], minlength= num_nodes)
-        degrees += torch.bincount(edge_index[1], minlength= num_nodes)
+        degrees = torch.bincount(edge_index[0], minlength=num_nodes)
+        degrees += torch.bincount(edge_index[1], minlength=num_nodes)
 
         return degrees
-    
+
 
 def remove_label_noise(dataset, label_noise_dict):
-    """ Removes the nodes with label noise from the dataset
+    """Removes the nodes with label noise from the dataset
 
     Paramters
     ---------
@@ -291,8 +326,16 @@ def remove_label_noise(dataset, label_noise_dict):
     dataset.hetero_graph_list = list(dataset.hetero_graphs.values())
 
 
-def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, use_full_cv = False, robust = False, min_max = False):
-    """ Adjusts the datasets for the split, set the split, impute, normalize and add node features
+def adjust_data_for_split(
+    cv_dataset,
+    final_test_dataset,
+    split,
+    faz=False,
+    use_full_cv=False,
+    robust=False,
+    min_max=False,
+):
+    """Adjusts the datasets for the split, set the split, impute, normalize and add node features
 
     Paramters
     ---------
@@ -312,7 +355,7 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, us
     train_dataset = copy.deepcopy(cv_dataset)
     val_dataset = copy.deepcopy(cv_dataset)
     val_dataset.set_split("val", split)
-    train_dataset.set_split("train",split)
+    train_dataset.set_split("train", split)
     test_dataset = copy.deepcopy(final_test_dataset)
     print(f"train dataset: {len(train_dataset)}")
     print(f"val dataset: {len(val_dataset)}")
@@ -339,17 +382,25 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, us
     if use_full_cv:
         #
         if min_max:
-            node_min_tensors, node_max_tensors = hetero_graph_min_max_params(cv_dataset_cp, robust= robust)
+            node_min_tensors, node_max_tensors = hetero_graph_min_max_params(
+                cv_dataset_cp, robust=robust
+            )
         else:
-            node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(cv_dataset_cp, robust= robust)
-        
+            node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(
+                cv_dataset_cp, robust=robust
+            )
+
     else:
         if min_max:
-            node_min_tensors, node_max_tensors = hetero_graph_min_max_params(train_dataset, robust= robust)
+            node_min_tensors, node_max_tensors = hetero_graph_min_max_params(
+                train_dataset, robust=robust
+            )
         else:
-            node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(train_dataset, robust= robust)
-        #node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(train_dataset, robust= robust)
-        
+            node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(
+                train_dataset, robust=robust
+            )
+        # node_mean_tensors, node_std_tensors = hetero_graph_standardization_params(train_dataset, robust= robust)
+
     if min_max:
         hetero_graph_min_max_scaling(train_dataset, node_min_tensors, node_max_tensors)
         hetero_graph_min_max_scaling(val_dataset, node_min_tensors, node_max_tensors)
@@ -358,14 +409,12 @@ def adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False, us
         hetero_graph_standardization(train_dataset, node_mean_tensors, node_std_tensors)
         hetero_graph_standardization(val_dataset, node_mean_tensors, node_std_tensors)
         hetero_graph_standardization(test_dataset, node_mean_tensors, node_std_tensors)
-        
-
 
     return train_dataset, val_dataset, test_dataset
 
 
 def eliminate_features(included_features, features_label_dict, datasets):
-    """ Eliminates the features that are not included in the included_features dictionary
+    """Eliminates the features that are not included in the included_features dictionary
 
     Paramters
     ---------
@@ -389,12 +438,13 @@ def eliminate_features(included_features, features_label_dict, datasets):
             features_label_dict[key].remove(feat)
             for dataset in datasets:
                 for data in dataset:
-                    data[key].x = torch.cat([data[key].x[:, :idx], data[key].x[:, idx+1:]], dim = 1)
+                    data[key].x = torch.cat(
+                        [data[key].x[:, :idx], data[key].x[:, idx + 1 :]], dim=1
+                    )
 
 
 def log_scaling(log_scale_dict, feature_label_dict, datasets):
-    
-    """ Applies log scaling to the features in the datasets
+    """Applies log scaling to the features in the datasets
 
     Paramters
     ---------
@@ -413,11 +463,10 @@ def log_scaling(log_scale_dict, feature_label_dict, datasets):
                     data[key].x[:, idx] = torch.log(data[key].x[:, idx] + 1)
 
     # also need to adjust the dictionary of the graphs
-                    
+
     for key in log_scale_dict.keys():
         for feat in log_scale_dict[key]:
             idx = feature_label_dict[key].index(feat)
             for dataset in datasets:
                 for data in dataset.hetero_graphs.values():
                     data[key].x[:, idx] = torch.log(data[key].x[:, idx] + 1)
-
