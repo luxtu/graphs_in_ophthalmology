@@ -2,8 +2,15 @@ import copy
 import json
 import os
 import pickle
+import time
 
+import numpy as np
 import torch
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    classification_report,
+)
 from torch_geometric.nn import (
     GATConv,
     GCNConv,
@@ -16,6 +23,43 @@ from torch_geometric.nn import (
 
 from models import heterogeneous_gnn
 from utils import dataprep_utils
+
+
+def evaluate_training_time(clf, loader, epochs=100):
+    start = time.time()
+    print("Start training")
+    for epoch in range(1, epochs + 1):
+        _, _, _, _ = clf.train(loader)
+    end = time.time()
+    print(f"Training time: {end - start}")
+    return end - start
+
+
+def delete_edges(dataset):
+    # for data in test_dataset:
+    for data in dataset:
+        for edge_type in data.edge_index_dict.keys():
+            # assign each edge type to an empty tensor with shape (2,0)
+            data[edge_type].edge_index = torch.zeros((2, 0), dtype=torch.long)
+    return dataset
+
+
+def evaluate_performance(
+    clf, loader, OCTA500=False, label_names=["Healthy/DM", "NPDR", "PDR"]
+):
+    y_prob, y_true = clf.predict(loader)
+    y_pred = np.argmax(y_prob, axis=1)
+    if OCTA500:
+        y_pred[y_pred > 0] = 1
+        label_names = ["Healthy", "DR"]
+    report = classification_report(
+        y_true, y_pred, target_names=label_names, output_dict=True
+    )
+    acc = accuracy_score(y_true, y_pred)
+    bal_acc = balanced_accuracy_score(y_true, y_pred)
+    metrics = {"accuracy": acc, "balanced_accuracy": bal_acc}
+
+    return report, metrics
 
 
 def get_param_count(state_dict):

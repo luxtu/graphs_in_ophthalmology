@@ -1,53 +1,13 @@
 # %%
 # import the necessary modules
 import os
-import time
 
-import numpy as np
 import pandas as pd
 import torch
-from sklearn.metrics import (
-    accuracy_score,
-    balanced_accuracy_score,
-    classification_report,
-)
 from torch_geometric.loader import DataLoader
 
 from models import graph_classifier
 from utils import dataprep_utils, explain_inference_utils
-
-
-# %% define functions
-def evaluate_training_time(clf, loader, epochs=100):
-    start = time.time()
-    print("Start training")
-    for epoch in range(1, epochs + 1):
-        _, _, _, _ = clf.train(loader)
-    end = time.time()
-    print(f"Training time: {end - start}")
-    return end - start
-
-
-def delete_edges(dataset):
-    # for data in test_dataset:
-    for data in dataset:
-        for edge_type in data.edge_index_dict.keys():
-            # assign each edge type to an empty tensor with shape (2,0)
-            data[edge_type].edge_index = torch.zeros((2, 0), dtype=torch.long)
-    return dataset
-
-
-def evaluate_performance(clf, loader):
-    y_prob, y_true = clf.predict(loader)
-    y_pred = np.argmax(y_prob, axis=1)
-    report = classification_report(
-        y_true, y_pred, target_names=label_names, output_dict=True
-    )
-    acc = accuracy_score(y_true, y_pred)
-    bal_acc = balanced_accuracy_score(y_true, y_pred)
-    metrics = {"accuracy": acc, "balanced_accuracy": bal_acc}
-
-    return report, metrics
 
 
 # %% load the data
@@ -130,8 +90,8 @@ for run_id in sorted(run_ids):
     clf.model.load_state_dict(state_dict)
 
     # evaluate the performance
-    test_report, test_metrics = evaluate_performance(clf, test_loader)
-    val_report, val_metrics = evaluate_performance(clf, val_loader)
+    test_report, test_metrics = explain_inference_utils.evaluate_performance(clf, test_loader)
+    val_report, val_metrics = explain_inference_utils.evaluate_performance(clf, val_loader)
 
     df_metrics = pd.concat([df_metrics, pd.DataFrame(test_metrics, index=[split])])
     df_report = pd.concat([df_report, pd.DataFrame(test_report).transpose()])
