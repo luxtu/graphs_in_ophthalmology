@@ -10,7 +10,7 @@ from explainability import (
     sample_feature_importance,
 )
 from models import graph_classifier
-from utils import explain_inference_utils
+from utils import explain_inference_utils, dataprep_utils
 
 # %%
 # loading the state dict and model config
@@ -50,7 +50,7 @@ else:
 # %%
 # load the data
 dataset_list, features_label_dict = (
-    explain_inference_utils.load_private_datasets(split, faz_node_bool)
+    dataprep_utils.load_private_datasets(split, faz_node_bool)
 )
 train_dataset, val_dataset, test_dataset = dataset_list
 

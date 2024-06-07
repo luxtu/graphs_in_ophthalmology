@@ -29,7 +29,7 @@ label_names = ["Healthy/DM", "NPDR", "PDR"]
 faz_node_bool = True
 
 # load the data
-cv_dataset, final_test_dataset = explain_inference_utils.load_private_pickled_data()
+cv_dataset, final_test_dataset = dataprep_utils.load_private_pickled_data()
 
 
 df_report = pd.DataFrame()
@@ -61,7 +61,7 @@ for run_id in sorted(run_ids):
     # eliminate highly correlated features
     dataset_list = [train_dataset, val_dataset, test_dataset]
     dataset_list, features_label_dict = (
-        explain_inference_utils.delete_highly_correlated_features(
+        dataprep_utils.delete_highly_correlated_features(
             dataset_list, faz_node_bool
         )
     )

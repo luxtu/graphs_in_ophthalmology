@@ -1,6 +1,10 @@
-import torch
 import copy
+import json
+import pickle
 from collections import Counter
+
+import numpy as np
+import torch
 
 
 def get_class_weights(train_labels, verbose=False):
@@ -470,3 +474,150 @@ def log_scaling(log_scale_dict, feature_label_dict, datasets):
             for dataset in datasets:
                 for data in dataset.hetero_graphs.values():
                     data[key].x[:, idx] = torch.log(data[key].x[:, idx] + 1)
+
+
+def aggreate_graph(dataset, features_label_dict, faz=False, agg_type="sum"):
+    # check if the datasets have an faz node type
+    node_types = ["graph_1", "graph_2"]
+
+    if faz:
+        node_types.append("faz")
+        x_1_shape = len(features_label_dict["graph_2"]) * 2 + len(
+            features_label_dict["graph_1"]
+        )
+    else:
+        x_1_shape = len(features_label_dict["graph_2"]) + len(
+            features_label_dict["graph_1"]
+        )
+
+    x_0_shape = len(dataset)
+    x = np.zeros((x_0_shape, x_1_shape))
+    y = np.zeros((x_0_shape,))
+
+    for i in range(len(dataset)):
+        graph_1 = dataset[i]["graph_1"]
+        graph_2 = dataset[i]["graph_2"]
+        y[i] = dataset[i].y
+
+        # average the features of all nodes in the graph
+
+        if agg_type == "sum":
+            graph_1_aggr = graph_1.x.numpy().sum(axis=0)
+            graph_2_aggr = graph_2.x.numpy().sum(axis=0)
+        elif agg_type == "mean":
+            graph_1_aggr = graph_1.x.numpy().mean(axis=0)
+            graph_2_aggr = graph_2.x.numpy().mean(axis=0)
+        elif agg_type == "max":
+            graph_1_aggr = graph_1.x.numpy().max(axis=0)
+            graph_2_aggr = graph_2.x.numpy().max(axis=0)
+
+        x[i, : len(features_label_dict["graph_1"])] = graph_1_aggr
+        x[i, len(features_label_dict["graph_1"]) :] = graph_2_aggr
+
+        if "faz" in node_types:
+            print("FAZ is in the node types")
+            faz = dataset[i]["faz"]
+            faz_sum = faz.x.numpy().sum(axis=0)
+            x[
+                i,
+                len(features_label_dict["graph_1"])
+                + len(features_label_dict["graph_2"]) :,
+            ] = faz_sum
+
+    return x, y
+
+
+def load_private_pickled_data():
+    """
+    Load the pickled data
+    """
+    data_type = "DCP"
+
+    mode_cv = "cv"
+    mode_final_test = "final_test"
+
+    # load the datasets
+    cv_pickle_processed = f"../data/{data_type}_{mode_cv}_selected_sweep_repeat_v2.pkl"
+    final_test_pickle_processed = (
+        f"../data/{data_type}_{mode_final_test}_selected_sweep_repeat_v2.pkl"
+    )
+    # load the pickled datasets
+    with open(cv_pickle_processed, "rb") as file:
+        cv_dataset = pickle.load(file)
+
+    with open(final_test_pickle_processed, "rb") as file:
+        final_test_dataset = pickle.load(file)
+
+    return cv_dataset, final_test_dataset
+
+
+def load_private_datasets(split, faz_node_bool):
+    """
+    Load the datasets
+    """
+    cv_dataset, final_test_dataset = load_private_pickled_data()
+
+    train_dataset, val_dataset, test_dataset = adjust_data_for_split(
+        cv_dataset, final_test_dataset, split, faz=True
+    )
+
+    dataset_list = [train_dataset, val_dataset, test_dataset]
+    dataset_list, features_label_dict = delete_highly_correlated_features(
+        dataset_list, faz_node_bool
+    )
+
+    return dataset_list, features_label_dict
+
+
+def delete_highly_correlated_features(dataset_list, faz_node_bool):
+    with open("feature_configs/feature_name_dict_new.json", "r") as file:
+        label_dict_full = json.load(file)
+    features_label_dict = copy.deepcopy(label_dict_full)
+
+    # eliminate features with extremely high correlation to other features
+    eliminate_features = {
+        "graph_1": [
+            "num_voxels",
+            "hasNodeAtSampleBorder",
+            "maxRadiusAvg",
+            "maxRadiusStd",
+        ],
+        "graph_2": [
+            "centroid_weighted-0",
+            "centroid_weighted-1",
+            "feret_diameter_max",
+            "orientation",
+        ],
+    }
+
+    if faz_node_bool:
+        eliminate_features["faz"] = [
+            "centroid_weighted-0",
+            "centroid_weighted-1",
+            "feret_diameter_max",
+            "orientation",
+        ]
+
+    # get positions of features to eliminate and remove them from the feature label dict and the graphs
+    for key in eliminate_features.keys():
+        for feat in eliminate_features[key]:
+            idx = features_label_dict[key].index(feat)
+            features_label_dict[key].remove(feat)
+            for dataset in dataset_list:
+                for data in dataset:
+                    data[key].x = torch.cat(
+                        [data[key].x[:, :idx], data[key].x[:, idx + 1 :]], dim=1
+                    )
+
+    # add the new features to the feature label dict
+    features_label_dict["graph_1"] = (
+        features_label_dict["graph_1"][:-1]
+        + ["cl_mean", "cl_std", "q25", "q75"]
+        + ["degree"]
+    )
+    features_label_dict["graph_2"] = (
+        features_label_dict["graph_2"][:-1] + ["q25", "q75", "std"] + ["degree"]
+    )
+    features_label_dict["faz"] = features_label_dict["faz"]
+
+    return dataset_list, features_label_dict

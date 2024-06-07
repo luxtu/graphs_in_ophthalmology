@@ -33,7 +33,7 @@ json_files = [f for f in os.listdir(check_point_folder) if f.endswith(".json")]
 faz_node_bool = True
 
 # load the data
-# cv_dataset, final_test_dataset = explain_inference_utils.load_private_pickled_data()
+# cv_dataset, final_test_dataset = dataprep_utils.load_private_pickled_data()
 
 # OCTA datasets
 octa500_pickle = "../../OCTA_500_RELEVANT_fix/all_OCTA500_selected_sweep_repeat_v2.pkl"
@@ -56,7 +56,7 @@ dataprep_utils.hetero_graph_standardization(
 
 dataset_list = [test_dataset]
 dataset_list, features_label_dict = (
-    explain_inference_utils.delete_highly_correlated_features(
+    dataprep_utils.delete_highly_correlated_features(
         dataset_list, faz_node_bool
     )
 )
