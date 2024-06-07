@@ -198,14 +198,10 @@ class VoidGraphGenerator:
             if skel_vals[0] ==0:
                 try:
                     matching_regions[skel_vals[1]] = lab_val
-                    matched_regions += 1
                 except IndexError:
-                    failed_regions += 1
                     pass
             else:
                 matching_regions[skel_vals[0]] = lab_val
-                matched_regions += 1
 
-        print(matched_regions, failed_regions)
         return matching_regions
 
