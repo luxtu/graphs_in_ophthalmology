@@ -476,14 +476,16 @@ def log_scaling(log_scale_dict, feature_label_dict, datasets):
                     data[key].x[:, idx] = torch.log(data[key].x[:, idx] + 1)
 
 
-def aggreate_graph(dataset, features_label_dict, faz=False, agg_type="sum"):
+def aggreate_graph(dataset, features_label_dict, faz=False, agg_type="sum", merge_faz=False):
     # check if the datasets have an faz node type
     node_types = ["graph_1", "graph_2"]
 
     if faz:
         node_types.append("faz")
-        x_1_shape = len(features_label_dict["graph_2"]) * 2 + len(
-            features_label_dict["graph_1"]
+        x_1_shape = (
+            len(features_label_dict["graph_2"])
+            + len(features_label_dict["graph_1"])
+            + len(features_label_dict["faz"])
         )
     else:
         x_1_shape = len(features_label_dict["graph_2"]) + len(
@@ -512,17 +514,35 @@ def aggreate_graph(dataset, features_label_dict, faz=False, agg_type="sum"):
             graph_2_aggr = graph_2.x.numpy().max(axis=0)
 
         x[i, : len(features_label_dict["graph_1"])] = graph_1_aggr
-        x[i, len(features_label_dict["graph_1"]) :] = graph_2_aggr
 
-        if "faz" in node_types:
-            print("FAZ is in the node types")
-            faz = dataset[i]["faz"]
-            faz_sum = faz.x.numpy().sum(axis=0)
+        if faz and not merge_faz:
+            x[
+                i,
+                len(features_label_dict["graph_1"]) : len(
+                    features_label_dict["graph_2"] + features_label_dict["graph_1"]
+                ),
+            ] = graph_2_aggr
+            faz_node = dataset[i]["faz"]
+            faz_sum = faz_node.x.numpy().sum(axis=0)
             x[
                 i,
                 len(features_label_dict["graph_1"])
                 + len(features_label_dict["graph_2"]) :,
             ] = faz_sum
+
+        # merge all but the last values of the faz with the graph_2 values
+        elif faz and merge_faz and agg_type == "sum":
+            faz_node = dataset[i]["faz"]
+            faz_sum = faz_node.x.numpy().sum(axis=0)
+            graph_2_aggr[: len(faz_sum)-1] += faz_sum[: len(faz_sum)-1]
+            graph_2_aggr[-1] += faz_sum[-1]
+
+            x[
+                i,
+                len(features_label_dict["graph_1"]) : len(
+                    features_label_dict["graph_2"] + features_label_dict["graph_1"]
+                ),
+            ] = graph_2_aggr
 
     return x, y
 
