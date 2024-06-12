@@ -55,10 +55,8 @@ dataprep_utils.hetero_graph_standardization(
 )
 
 dataset_list = [test_dataset]
-dataset_list, features_label_dict = (
-    dataprep_utils.delete_highly_correlated_features(
-        dataset_list, faz_node_bool
-    )
+dataset_list, features_label_dict = dataprep_utils.delete_highly_correlated_features(
+    dataset_list, faz_node_bool
 )
 
 test_dataset = dataset_list[0]
