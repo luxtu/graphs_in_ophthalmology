@@ -1,5 +1,4 @@
-from loader import hetero_graph_loader, hetero_graph_loader_faz
-import numpy as np 
+from loader import hetero_graph_loader
 import torch
 import copy
 import json
