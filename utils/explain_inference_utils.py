@@ -19,7 +19,7 @@ from torch_geometric.nn import (
     global_mean_pool,
 )
 
-from models import heterogeneous_gnn
+from models import heterogeneous_gnn, homogeneous_gnn
 
 
 def evaluate_training_time(clf, loader, epochs=100):
@@ -162,5 +162,44 @@ def create_model(model_config, node_types, out_channels):
         faz_node=model_config["parameters"]["faz_node"],
         start_rep=model_config["parameters"]["start_rep"],
         aggr_faz=model_config["parameters"]["aggr_faz"],
+    )
+    return model
+
+
+def create_homogeneous_model(model_config, out_channels):
+    """
+    Create the model
+    """
+    agg_mode_dict = {
+        "mean": global_mean_pool,
+        "max": global_max_pool,
+        "add": global_add_pool,
+        "add_max": [global_add_pool, global_max_pool],
+        "max_mean": [global_max_pool, global_mean_pool],
+        "add_mean": [global_add_pool, global_mean_pool],
+    }
+    homogeneous_conv_dict = {
+        "gat": GATConv,
+        "sage": SAGEConv,
+        "graph": GraphConv,
+        "gcn": GCNConv,
+    }
+    activation_dict = {
+        "relu": torch.nn.functional.relu,
+        "leaky": torch.nn.functional.leaky_relu,
+        "elu": torch.nn.functional.elu,
+    }
+
+    model = homogeneous_gnn.Homogeneous_GNN(
+        hidden_channels=model_config["parameters"]["hidden_channels"],
+        out_channels=out_channels,
+        num_layers=model_config["parameters"]["num_layers"],
+        dropout=0,
+        aggregation_mode=agg_mode_dict[model_config["parameters"]["aggregation_mode"]],
+        num_pre_processing_layers=model_config["parameters"]["pre_layers"],
+        num_post_processing_layers=model_config["parameters"]["post_layers"],
+        batch_norm=model_config["parameters"]["batch_norm"],
+        homogeneous_conv=homogeneous_conv_dict[model_config["parameters"]["homogeneous_conv"]],
+        activation=activation_dict[model_config["parameters"]["activation"]],
     )
     return model
