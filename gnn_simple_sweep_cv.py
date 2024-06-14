@@ -3,47 +3,24 @@ import torch
 import copy
 import json
 
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, cohen_kappa_score
+from sklearn.metrics import accuracy_score, balanced_accuracy_score
 from torch_geometric.nn import global_mean_pool, global_max_pool, global_add_pool
 from models import graph_classifier, homogeneous_gnn
 from torch_geometric.loader import DataLoader
 
 from sklearn.metrics import roc_auc_score, roc_curve, auc
-from utils import prep, to_homogeneous_graph
+from utils import dataprep_utils, to_homogeneous_graph
 import wandb
 from sklearn.preprocessing import LabelBinarizer
 from torch_geometric.nn import GATConv, SAGEConv, GraphConv, GCNConv
 
 # empty cuda cache
 
-# Define sweep config
-sweep_configuration = {
-    "method": "random",
-    "name": "vessel graph sweep split 1, random search",
-    "metric": {"goal": "maximize", "name": "best_val_bal_acc"},
-    "parameters": {
-        "batch_size": {"values": [8, 16, 32, 64]},
-        "epochs": {"values": [100]},
-        "lr": {"max": 0.05, "min": 0.005}, # learning rate to high does not work
-        "weight_decay": {"max": 0.01, "min": 0.00001},
-        "hidden_channels": {"values": [16, 32, 64]}, #[64, 128]
-        "dropout": {"values": [0.1, 0.3, 0.4]}, # 0.2,  more droput looks better
-        "num_layers": {"values": [1,2,5]},
-        "aggregation_mode": {"values": ["mean", "add_max", "max_mean"]},# removed, "add", "max", "add_mean"
-        "pre_layers": {"values": [1,2,4]},
-        "post_layers": {"values": [1,2,4]},
-        "final_layers": {"values": [1,2,4]},
-        "batch_norm": {"values": [True, False]},
-        "class_weights": {"values": ["balanced"]}, # "balanced", #  # "unbalanced",  , "weak_balanced"
-        "dataset": {"values": ["DCP"]}, #, "DCP"
-        "homogeneous_conv": {"values": ["sage"]}, # removed "gat", "graph", "gcn"
-        "activation": {"values": ["relu", "leaky", "elu"]},
-        "split": {"values": [1]},
-        "smooth_label_loss": {"values": [True, False]},
-    },
-}
+# load the sweep configuration
+with open("sweep_configs/sweep_config_workshop_trial.json", "rb") as file:
+    sweep_configuration = json.load(file)
 
-sweep_id = wandb.sweep(sweep=sweep_configuration, project= "homogeneous graph")
+sweep_id = wandb.sweep(sweep=sweep_configuration, project= "workshop_first_trials")
 # loading data
 
 data_type = sweep_configuration["parameters"]["dataset"]["values"][0]
@@ -123,20 +100,17 @@ final_test_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(graph_path_1=ves
 #
 #
 split = sweep_configuration["parameters"]["split"]["values"][0]
-train_dataset, val_dataset, test_dataset = prep.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False)
+train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False)
 
 
 
-with open("feature_name_dict.json", "r") as file:
+with open("feature_configs/feature_name_dict.json", "rb") as file:
     label_dict_full = json.load(file)
     #features_label_dict = json.load(file)
 features_label_dict = copy.deepcopy(label_dict_full)
 
 eliminate_features = {"graph_1":["num_voxels", "maxRadiusAvg", "hasNodeAtSampleBorder", "maxRadiusStd"], 
                       "graph_2":["centroid_weighted-0", "centroid_weighted-1", "feret_diameter_max", "orientation"]}
-
-#if faz_node_bool:
-#    eliminate_features["faz"] = ["centroid_weighted-0", "centroid_weighted-1","feret_diameter_max", "orientation"] # , "centroid-0", "centroid-1", "solidity", "extent"
 
 
 # get positions of features to eliminate and remove them from the feature label dict and the graphs
@@ -155,7 +129,7 @@ for key in eliminate_features.keys():
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # class weight extraction
 train_labels = [int(data.y[0]) for data in train_dataset]
-class_weights = prep.get_class_weights(train_labels, verbose=False)
+class_weights = dataprep_utils.get_class_weights(train_labels, verbose=False)
 class_weights = torch.tensor(class_weights, device=device)
 class_weights_weak = class_weights ** 0.5 
 
@@ -289,7 +263,7 @@ def main():
             best_val_bal_acc = val_bal_acc
             if best_val_bal_acc > 0.65:
 
-                #torch.save(classifier.model.state_dict(), f"checkpoints/{wandb.config.dataset}_model_{wandb.config.split}_faz_node_{wandb.config.faz_node}_{run.id}.pt")
+                torch.save(classifier.model.state_dict(), f"checkpoints_homogeneous/{wandb.config.dataset}_model_{wandb.config.split}_{run.id}.pt")
 
                 # run inference on test set
                 y_prob_test, y_true_test = classifier.predict(test_loader)
@@ -305,10 +279,6 @@ def main():
                 print(f"Test balanced accuracy: {test_bal_acc}")
                 print("#"*20)
 
-
-        kappa = cohen_kappa_score(y_true_val, y_pred_val, weights= "quadratic")
-
-        res_dict["kappa"] = kappa
         res_dict["best_val_bal_acc"]= best_val_bal_acc
 
         wandb.log(res_dict)
