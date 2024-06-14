@@ -10,6 +10,7 @@ def to_vessel_graph(hetero_dataset):
         hetero_data = hetero_dataset[i]
 
         vessel_graph_data = Data(
+            graph_id=hetero_data.graph_id,
             x=hetero_data["graph_1"].x,
             edge_index=hetero_data["graph_1", "to", "graph_1"].edge_index,
             y=hetero_data.y,
@@ -30,6 +31,7 @@ def to_void_graph(hetero_dataset):
         hetero_data = hetero_dataset[i]
 
         void_graph_data = Data(
+            graph_id=hetero_data.graph_id,
             x=hetero_data["graph_2"].x,
             edge_index=hetero_data["graph_2", "to", "graph_2"].edge_index,
             y=hetero_data.y,
