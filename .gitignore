@@ -5,7 +5,6 @@ __pycache__/
 *.gif
 *.pkl
 *.pt
-*.png
 *.dot
 *.csv
 wandb
