@@ -25,6 +25,8 @@ Important vessels for the classification (Diabetic Retinopathy Stage: PDR)      
 
 
 ## References
-[1] Vessel Segmentation Kreitner et al. [[code](https://github.com/KreitnerL/OCTA-graph-extraction/tree/master)[[paper](https://ieeexplore.ieee.org/abstract/document/10400503)]
-[2] Skeletonization + Vessel Graph Drees et al. [[code](https://zivgitlab.uni-muenster.de/d_dree02/graph_extraction_evaluation)[[paper](https://link.springer.com/article/10.1186/s12859-021-04262-w)]
+[1] Vessel Segmentation Kreitner et al. [[code](https://github.com/KreitnerL/OCTA-graph-extraction/tree/master)][[paper](https://ieeexplore.ieee.org/abstract/document/10400503)]
+
+[2] Skeletonization + Vessel Graph Drees et al. [[code](https://zivgitlab.uni-muenster.de/d_dree02/graph_extraction_evaluation)][[paper](https://link.springer.com/article/10.1186/s12859-021-04262-w)]
+
 [3] Pytorch Geometric: [[code](https://github.com/pyg-team/pytorch_geometric)][[paper](https://arxiv.org/abs/1903.02428)]
