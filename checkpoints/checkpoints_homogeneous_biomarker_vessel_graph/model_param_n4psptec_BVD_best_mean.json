@@ -1,0 +1,16 @@
+{
+    "parameters": {
+        "activation": "elu",
+        "aggregation_mode": "mean",
+        "batch_norm": false,
+        "dropout": 0.1,
+        "final_layers": 2,
+        "hidden_channels": 32,
+        "homogeneous_conv": "gcn",
+        "num_layers": 5,
+        "post_layers": 1,
+        "pre_layers": 2
+    },
+    "split": 1
+}
+

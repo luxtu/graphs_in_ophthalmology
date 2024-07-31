@@ -1,0 +1,16 @@
+{
+    "parameters": {
+        "activation": "leaky",
+        "aggregation_mode": "mean",
+        "batch_norm": false,
+        "dropout": 0.1,
+        "final_layers": 2,
+        "hidden_channels": 64,
+        "homogeneous_conv": "sage",
+        "num_layers": 1,
+        "post_layers": 4,
+        "pre_layers": 1
+    },
+    "split": 1
+}
+
