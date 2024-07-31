@@ -7,3 +7,6 @@ We present and evaluate two graph representations of OCTA images.
 
 The basis of both representations is a high-quality segmentation map. In vessel graphs, the nodes represent vessel segments that end either at a bifurcation point or at the end of a vessel. Edges are introduced if two vessel segments are connected through a bifurcation point. The intercapillary area contains the intercapillary areas as nodes. It connects intercapillary area nodes through edges if they are separated by just a single pixel of a vessel centerline (skeletonized segmentation map).
 
+Vessel Segmentation            |  Vessel Graph             |  Intercapillary Area Graph
+:----------------------------:|   :----------------------------:   |:----------------------------:
+![](doc_figures/seg_c.png)  |  ![](doc_figures/ves_c.png)     |  ![](doc_figures/ica_c.png)
