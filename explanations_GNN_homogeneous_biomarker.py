@@ -18,8 +18,8 @@ from utils import explain_inference_utils, dataprep_utils, to_homogeneous_graph
 
 # %%
 # loading the state dict and model config
-check_point_folder = "../data/checkpoints_homogeneous_biomarker_vessel_graph"
-#run_id = "20oc6okd" #"tvib49x7" # "r619bjft"  
+check_point_folder = "checkpoints/checkpoints_homogeneous_biomarker_vessel_graph"
+
 target_biomarker = "Fractal"
 graph_type = "vessel"
 aggr_type = "best_mean"
@@ -181,7 +181,7 @@ clf.model.load_state_dict(state_dict)
 # %%
 # set up explainer
 # "GuidedBP"
-explain_type = "PGExplainer"
+explain_type = "IntegratedGradients"
 gnnexp_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 save_path = "../data/explain_homogeneous_biomarker_void_graph/" + run_id
@@ -227,8 +227,8 @@ for idx, data in enumerate(gnnexp_loader):
     data_label = data.graph_id[0]
     print(f"Generating explanations for {data_label}")
 
-    #algorithm = CaptumExplainer(explain_type)
-    algorithm = GNNExplainer()
+    algorithm = CaptumExplainer(explain_type)
+    #algorithm = GNNExplainer()
     explainer = Explainer(
         model=clf.model,
         algorithm=algorithm, #explain_type
@@ -318,11 +318,5 @@ for idx, data in enumerate(gnnexp_loader):
         break
 
 
-# %%
-# force reload of the explainability module
-import importlib
-importlib.reload(explanation_in_raw_data_homogeneous)
-importlib.reload(sample_feature_importance_homogeneous)
-importlib.reload(explain_inference_utils)
 
 # %%

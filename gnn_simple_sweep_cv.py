@@ -61,44 +61,7 @@ final_test_dataset = hetero_graph_loader.HeteroGraphLoaderTorch(graph_path_1=ves
                                                         )
 
 
-#    void_graph_path = f"../data/{data_type}_void_graph_faz_node"
-#    hetero_edges_path = f"../data/{data_type}_hetero_edges_faz_node"
-#    faz_node_path = f"../data/{data_type}_faz_nodes"
-#    faz_region_edge_path = f"../data/{data_type}_faz_region_edges"
-#    faz_vessel_edge_path = f"../data/{data_type}_faz_vessel_edges"
-#
-#    cv_pickle = f"../data/{data_type}_{mode_cv}_dataset_faz_isol_not_removed.pkl"
-#    cv_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
-#                                                            graph_path_2=void_graph_path,
-#                                                            graph_path_3=faz_node_path,
-#                                                            hetero_edges_path_12=hetero_edges_path,
-#                                                            hetero_edges_path_13=faz_vessel_edge_path,
-#                                                            hetero_edges_path_23=faz_region_edge_path,
-#                                                            mode = mode_cv,
-#                                                            label_file = label_file, 
-#                                                            line_graph_1 =True, 
-#                                                            class_dict = octa_dr_dict,
-#                                                            pickle_file = cv_pickle, #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
-#                                                            remove_isolated_nodes=False
-#                                                            )
-#
-#    final_test_pickle = f"../data/{data_type}_{mode_final_test}_dataset_faz_isol_not_removed.pkl"
-#    final_test_dataset = hetero_graph_loader_faz.HeteroGraphLoaderTorch(graph_path_1=vessel_graph_path,
-#                                                            graph_path_2=void_graph_path,
-#                                                            graph_path_3=faz_node_path,
-#                                                            hetero_edges_path_12=hetero_edges_path,
-#                                                            hetero_edges_path_13=faz_vessel_edge_path,
-#                                                            hetero_edges_path_23=faz_region_edge_path,
-#                                                            mode = mode_final_test,
-#                                                            label_file = label_file, 
-#                                                            line_graph_1 =True, 
-#                                                            class_dict = octa_dr_dict,
-#                                                            pickle_file = final_test_pickle, #f"../{data_type}_{mode_train}_dataset_faz.pkl" # f"../{data_type}_{mode_train}_dataset_faz.pkl"
-#                                                            remove_isolated_nodes=False
-#                                                            )
-#
-#
-#
+
 split = sweep_configuration["parameters"]["split"]["values"][0]
 train_dataset, val_dataset, test_dataset = dataprep_utils.adjust_data_for_split(cv_dataset, final_test_dataset, split, faz = False)
 

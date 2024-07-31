@@ -18,18 +18,13 @@ from utils import explain_inference_utils, dataprep_utils, to_homogeneous_graph
 
 # %%
 # loading the state dict and model config
-check_point_folder = "../data/checkpoints_homogeneous_trial"
+check_point_folder = "checkpoints/checkpoints_homogeneous_staging_vessel_graph"
 run_id = "tvib49x7" # "r619bjft"  
 
-
-#checkpoints_homogeneous_biomarker_vessel_graph = "../data/checkpoints_homogeneous_staging_vessel_graph"
-#checkpoints_homogeneous_biomarker_void_graph = "../data/checkpoints_homogeneous_staging_void_graph"
 
 model_dict_vessel = {"best_mean": "3dr9fd83", "best_max": "zx4a6vs1", "best_add": "aoxg6zaf"}
 run_id = model_dict_vessel["best_mean"]
 
-#model_dict_void = {"best_mean": "", "best_max": "", "best_add": ""}
-#run_id = model_dict_void["best_max"]
 
 state_dict, model_config = explain_inference_utils.load_state_dict_and_model_config(
     check_point_folder, run_id
