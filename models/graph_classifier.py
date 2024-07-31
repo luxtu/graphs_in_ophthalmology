@@ -181,3 +181,70 @@ class graphClassifierHetero_94d26db:
         y = np.concatenate(y_out, axis=0)
 
         return pred, y
+
+
+
+
+
+class graphRegressorSimple:
+    def __init__(
+        self, model, loss_func, lr=0.005, weight_decay=5e-5
+    ):
+        self.model = model
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        self.model.to(self.device)
+        self.optimizer = torch.optim.AdamW(
+            self.model.parameters(), lr=lr, weight_decay=weight_decay
+        )
+        self.scheduler = ExponentialLR(self.optimizer, gamma=0.95)
+        self.lossFunc = loss_func
+
+    def train(self, loader):
+        self.model.train()
+        cum_loss = 0
+        raw_out = []
+        y_out = []
+
+        size_data_set = len(
+            loader.dataset
+        )  # must be done before iterating/regenerating the dataset
+        for data in loader:
+            # data.to(self.device)
+
+            out = self.model(data.x, data.edge_index, data.batch)
+            # remove the last dimension
+            out = out.squeeze()
+
+            # get the number of classes from the output
+            loss = self.lossFunc(out, data.y)
+
+            loss.backward()
+            self.optimizer.step()  # Update parameters based on gradients.
+            self.optimizer.zero_grad()  # Clear gradients.
+            cum_loss += loss.item()
+
+            raw_out.append(out.cpu().detach().numpy())
+            y_out.append(data.y.cpu().detach().numpy())
+
+        # raw_out)
+        pred = np.concatenate(raw_out, axis=0)
+        y = np.concatenate(y_out, axis=0)
+        self.scheduler.step()
+        return cum_loss / size_data_set, pred, y
+
+    @torch.no_grad()
+    def predict(self, loader):
+        raw_out = []
+        y_out = []
+        self.model.eval()
+        for data in loader:
+            data.to(self.device)
+            out = self.model(data.x, data.edge_index, data.batch)
+            raw_out.append(out.cpu().detach().numpy())
+            y_out.append(data.y.cpu().detach().numpy())
+
+        pred = np.concatenate(raw_out, axis=0)
+        y = np.concatenate(y_out, axis=0)
+
+        return pred, y
