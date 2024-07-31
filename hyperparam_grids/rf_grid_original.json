@@ -1,6 +1,0 @@
-{
-    "max_depth": [4, 5, 6, 8],
-    "max_features": ["sqrt", "log2"],
-    "class_weight": ["balanced", "balanced_subsample", null],
-    "n_estimators": [100, 300]
-}
