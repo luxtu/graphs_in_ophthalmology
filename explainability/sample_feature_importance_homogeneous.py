@@ -87,13 +87,13 @@ class SampleFeatureImportance:
         return score, graph_rel_pos_idcs
 
     def _relevant_nodes_fraction(
-        self, work_mask, explained_gradient, only_positive, feature_score = False
+        self, work_mask, explained_gradient, abs, feature_score = False
     ):
         graph_rel_pos_idcs = utils.identifiy_relevant_nodes(
             self.explanation,
             self.graph,
             explained_gradient=explained_gradient,
-            only_positive=only_positive,
+            abs=abs,
         )
         # print number of relevant nodes
         self._number_of_relevant_nodes(graph_rel_pos_idcs)
@@ -107,13 +107,13 @@ class SampleFeatureImportance:
         return score, graph_rel_pos_idcs
 
     def _relevant_nodes_top_k(
-        self, work_mask, explained_gradient, only_positive, feature_score = False
+        self, work_mask, explained_gradient, abs, feature_score = False
     ):
         graph_rel_pos_idcs = utils.top_k_important_nodes(
             self.explanation,
             self.graph,
             top_k=explained_gradient,
-            only_positive=only_positive,
+            abs=abs,
         )
 
         # print number of relevant nodes
@@ -129,10 +129,10 @@ class SampleFeatureImportance:
     def visualize_feature_importance(
         self,
         path,
-        explained_gradient,
-        only_positive,
-        with_boxplot,
-        num_features,
+        explained_gradient = None,
+        abs = False,
+        with_boxplot = False,
+        num_features = 5,
     ):
         """
         Wrapper for the pytorch geom function, since it does not include tight layout.
@@ -151,19 +151,19 @@ class SampleFeatureImportance:
 
         elif isinstance(explained_gradient, float):
             score, het_graph_rel_pos_dict = self._relevant_nodes_fraction(
-                work_mask, explained_gradient, only_positive, feature_score = True
+                work_mask, explained_gradient, abs, feature_score = True
             )
 
         elif isinstance(explained_gradient, int):
             score, het_graph_rel_pos_dict = self._relevant_nodes_top_k(
-                work_mask, explained_gradient, only_positive, feature_score = True
+                work_mask, explained_gradient, abs, feature_score = True
             )
 
         self._feature_importance_plot(
             path,
             score,
             num_features=num_features,
-            only_positive=only_positive,
+            abs=abs,
         )
 
         if with_boxplot:
@@ -172,12 +172,12 @@ class SampleFeatureImportance:
                 het_graph_rel_pos_dict,
                 score,
                 num_features=num_features,
-                only_positive=only_positive,
+                abs=abs,
             )
 
 
 
-    def _feature_importance_plot(self, path, score, num_features, only_positive):
+    def _feature_importance_plot(self, path, score, num_features, abs):
         import matplotlib.pyplot as plt
         import numpy as np
         import pandas as pd
@@ -193,7 +193,7 @@ class SampleFeatureImportance:
         df = pd.DataFrame(
             {"score": score}, index= self.feature_label_list_proper_names
         )
-        if only_positive:
+        if abs:
             df_sorted = df.reindex(df.sort_values("score", ascending=False).index)
         else:
             df_sorted = df.reindex(df.abs().sort_values("score", ascending=False).index)
@@ -218,7 +218,7 @@ class SampleFeatureImportance:
         het_graph_rel_pos_dict,
         score,
         num_features,
-        only_positive,
+        abs,
     ):
         import matplotlib.pyplot as plt
         import numpy as np
@@ -241,7 +241,7 @@ class SampleFeatureImportance:
             {"score": score_all}, index=self.feature_label_list_proper_names
         )
 
-        if only_positive:
+        if abs:
             df_sorted = df.reindex(df.sort_values("score", ascending=False).index)
         else:
             df_sorted = df.reindex(df.abs().sort_values("score", ascending=False).index)

@@ -2,7 +2,7 @@ def top_k_important_nodes(
     explanation_graph,
     graph,
     top_k=100,
-    only_positive=False,
+    abs=False,
 ):
     """
     Returns the gradients of the top k most important nodes for each graph or across all graphs
@@ -11,13 +11,13 @@ def top_k_important_nodes(
         explanation_graph,
         graph,
         top_k=top_k,
-        only_positive=only_positive,
+        abs=abs,
     )
 
 
 
 def _top_k_important_nodes(
-    explanation_graph, hetero_graph, top_k=100, only_positive=False
+    explanation_graph, hetero_graph, top_k=100, abs=False
 ):
     """
     Returns the gradients of the top k most important nodes for each graph
@@ -26,7 +26,7 @@ def _top_k_important_nodes(
     import torch
 
     # filter the nodes that are above the threshold
-    if only_positive:
+    if abs:
         het_graph_weight = explanation_graph.node_mask.sum(dim=-1)
     else:
         het_graph_weight = (
@@ -43,7 +43,7 @@ def _top_k_important_nodes(
     _, indices = torch.topk(het_graph_weight, top_k)
     het_graph_rel_pos = torch.zeros(het_graph_weight.shape, dtype=torch.bool)
     het_graph_rel_pos[indices] = True
-    if only_positive:
+    if abs:
         het_graph_rel_pos = het_graph_rel_pos & (het_graph_weight > 0)
     het_graph_rel_pos = het_graph_rel_pos.cpu().detach().numpy()
 
@@ -55,9 +55,9 @@ def identifiy_relevant_nodes(
     explanation_graph,
     graph,
     explained_gradient,
-    only_positive=False,
+    abs=False,
 ):
-    if only_positive:
+    if abs:
         threshold = _calculate_adaptive_node_threshold_pos(
             explanation_graph, explained_gradient=explained_gradient
         )
@@ -69,7 +69,7 @@ def identifiy_relevant_nodes(
         )
 
 
-    if only_positive:
+    if abs:
         het_graph_rel_pos = (
             explanation_graph.node_mask.sum(dim=-1) > threshold
         )

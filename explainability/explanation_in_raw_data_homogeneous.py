@@ -84,7 +84,7 @@ class RawDataExplainer:
         graph,
         vvg_df_nodes,
         matched_list,
-        only_positive=False,
+        abs=False,
         intensity_value=None,
     ):
         # for the vessels create a mask that containts the centerline of the relevant vessels
@@ -96,9 +96,10 @@ class RawDataExplainer:
         # extract the node positions from the graph
         node_positions = graph.pos.cpu().detach().numpy()
         # get the importance of the vessels
-        if only_positive:
+        if abs:
             importance = (
                 explanations.node_mask
+                .abs()
                 .sum(dim=-1)
                 .cpu()
                 .detach()
@@ -107,7 +108,6 @@ class RawDataExplainer:
         else:
             importance = (
                 explanations.node_mask
-                .abs()
                 .sum(dim=-1)
                 .cpu()
                 .detach()
@@ -296,7 +296,7 @@ class RawDataExplainer:
         df,
         pos,
         explanations,
-        only_positive=False,
+        abs=False,
         intensity_value=None,
     ):
         relevant_region_labels = []
@@ -318,9 +318,10 @@ class RawDataExplainer:
         alphas = np.zeros_like(raw, dtype=np.float32)
 
         # get the importance of the relevant regions
-        if only_positive:
+        if abs:
             importance_array = (
                 explanations.node_mask
+                .abs()
                 .sum(dim=-1)
                 .cpu()
                 .detach()
@@ -329,7 +330,6 @@ class RawDataExplainer:
         else:
             importance_array = (
                 explanations.node_mask
-                .abs()
                 .sum(dim=-1)
                 .cpu()
                 .detach()
@@ -357,12 +357,33 @@ class RawDataExplainer:
         path,
         label_names=None,
         target=None,
-        heatmap=False,
-        explained_gradient=0.95,
-        only_positive=False,
+        heatmap=True,
+        explained_gradient=None,
+        abs=False,
         points=False,
         intensity_value=None,
     ):
+        """Creates an overlay image of the raw image with the explanation
+
+        Parameters
+        ----------
+        explanation : the pytorch geometric explanation object
+        graph : the pytroch geometric graph object
+        graph_id : sample id
+        path : path to save the image
+        label_names : list of label names
+        target : target label
+        heatmap : bool, whether to create a heatmap or not
+        explained_gradient : float, the threshold for the explanation, if None, all nodes are considered
+        abs : bool, whether to take the absolute value of the explanation
+        points : bool, whether to plot the center points of the vessels/areas
+        intensity_value : float, the intensity value of the heatmap, if None, the importance value is used
+
+        Returns
+        -------
+        results : dict
+            Dictionary containing the results of the evaluation
+        """
         # extract the relevant segmentation, raw image and vvg
         # search the file strings for the graph_id
         seg_file, raw_file, vvg_file = self._process_files(graph_id)
@@ -382,14 +403,14 @@ class RawDataExplainer:
                 explanation,
                 graph,
                 explained_gradient=explained_gradient,
-                only_positive=only_positive,
+                abs=abs,
             )
         elif isinstance(explained_gradient, int):
             graph_rel_pos_idcs = utils.top_k_important_nodes(
                 explanation,
                 graph,
                 top_k=explained_gradient,
-                only_positive=only_positive,
+                abs=abs,
             )
         elif explained_gradient is None:
             graph_rel_pos_idcs = np.ones(
@@ -418,7 +439,7 @@ class RawDataExplainer:
                     graph,
                     vvg_df_nodes,
                     [raw, seg],
-                    only_positive=only_positive,
+                    abs=abs,
                     intensity_value=intensity_value,
                 )
             else:
@@ -478,7 +499,7 @@ class RawDataExplainer:
                     df,
                     pos,
                     explanation,
-                    only_positive,
+                    abs,
                     intensity_value=intensity_value,
                 )
             else:
