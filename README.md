@@ -24,6 +24,22 @@ Important vessels for the classification (Diabetic Retinopathy Stage: PDR)      
 :----------------------------:|   :----------------------------: 
 ![](doc_figures/overlay_example.png)  |  <img src="doc_figures/feature_example.png" width="500">
 
+## Usage
+
+### Installation of required packages in a virtual environment
+
+1.) Download venv package virtual environment (venv): python3 -m pip install --user virtualenv
+
+2.) Create a virtual environment: python3 -m venv venv
+
+3.) Activate virtual environment: source venv/bin/activate
+
+4.) Use requests to install required packages: pip install -r requirements.txt
+
+### 
+
+The folder demo_data contains an example graph representation for each graph type; checkpoints are stored in the checkpoints folder.
+The two "..._demo.py" files show how the graph representations combined with GNNs can be used to predict disease stage/biomarkers combined with interpretable explanations.
 
 
 ## References
