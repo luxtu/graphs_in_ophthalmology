@@ -36,7 +36,7 @@ Important vessels for the classification (Diabetic Retinopathy Stage: PDR)      
 
 4.) Use requests to install required packages: pip install -r requirements.txt
 
-### 
+### Demo inference and interpretable explanations
 
 The folder demo_data contains an example graph representation for each graph type; checkpoints are stored in the checkpoints folder.
 The two "..._demo.py" files show how the graph representations combined with GNNs can be used to predict disease stage/biomarkers combined with interpretable explanations.
