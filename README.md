@@ -1,6 +1,6 @@
 # Evaluating graphs as interpretable data representations of OCTA images for disease staging and biomarker prediction in ophthalmology
 
-<img src="doc_figures/Fig1_OCTA_WS.pdf" width="500">
+<img src="doc_figures/Fig1_OCTA_WS.png">
 
 ## Graph Representations
 
