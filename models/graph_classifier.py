@@ -139,7 +139,11 @@ class graphRegressorSimple:
             y_out.append(data.y.cpu().detach().numpy())
 
         # raw_out)
-        pred = np.concatenate(raw_out, axis=0)
+        try:
+            pred = np.concatenate(raw_out, axis=0)
+        except ValueError:
+            pred = np.concatenate(raw_out, axis=None)
+
         y = np.concatenate(y_out, axis=0)
         self.scheduler.step()
         return cum_loss / size_data_set, pred, y
