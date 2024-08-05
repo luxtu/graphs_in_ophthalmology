@@ -8,11 +8,8 @@ __pycache__/
 *.dot
 *.csv
 wandb
-saved_data
-data
 env/
 .venv/
-explain_out/
-debug_notebooks/
-scripts/
 sweep_configs/
+model_search/
+full_data_expl/
