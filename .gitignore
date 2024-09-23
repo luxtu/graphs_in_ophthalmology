@@ -3,9 +3,7 @@ wandb/
 __pycache__/
 *.pyc
 *.gif
-*.pkl
 *.dot
-*.csv
 wandb
 env/
 .venv/
