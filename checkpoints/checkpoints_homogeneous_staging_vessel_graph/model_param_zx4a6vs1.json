@@ -1,0 +1,16 @@
+{
+    "parameters": {
+        "activation": "relu",
+        "aggregation_mode": "max",
+        "batch_norm": 1,
+        "dropout": 0,
+        "final_layers": 1,
+        "hidden_channels": 16,
+        "homogeneous_conv": "gcn",
+        "num_layers": 2,
+        "post_layers": 2,
+        "pre_layers": 2
+    },
+    "split": 1
+}
+

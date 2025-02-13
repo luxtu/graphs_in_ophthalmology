@@ -1,0 +1,12 @@
+wandb/
+.vscode/
+__pycache__/
+*.pyc
+*.gif
+*.dot
+wandb
+env/
+.venv/
+sweep_configs/
+model_search/
+full_data_expl/
